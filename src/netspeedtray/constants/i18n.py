@@ -45,6 +45,7 @@ class I18nStrings:
         "fr_FR": "Français (France)",
         "nl_NL": "Nederlands (Nederland)",
         "pl_PL": "Polski (Polska)",
+        "zh_CN": "简体中文",
         "ru_RU": "Русский (Россия)",
         "ko_KR": "한국어 (대한민국)",
         "sl_SI": "Slovenščina (Slovenija)",
