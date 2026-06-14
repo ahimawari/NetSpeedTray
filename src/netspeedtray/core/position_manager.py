@@ -250,22 +250,38 @@ class PositionCalculator:
         y_center = y_origin + (visible_tb_height - widget_height) / 2.0
         y = round(y_center)
         
-        # Calculate X: align to right (system tray side) with offset.
-        # right_boundary is the left edge of the tray/notification area when available.
+        # Calculate X: align either to the system tray side or the left side.
         tray_rect = taskbar_info.get_tray_rect()
-        right_boundary = round(tray_rect[0] / dpi_scale) if tray_rect else (full_geom.right() + 1)
-
-        # left_boundary is the right edge of the task list/app-icons region when available.
         tasklist_rect = taskbar_info.tasklist_rect
-        left_boundary = round(tasklist_rect[2] / dpi_scale) if tasklist_rect else full_geom.left()
-
         offset = config.get('tray_offset_x', constants.config.defaults.DEFAULT_TRAY_OFFSET_X)
-        x = round(right_boundary - widget_width - offset)
-        
-        # Safety check: don't overlap with app icons on left
-        if x < left_boundary:
-            logger.warning("Calculated position overlaps app icons; snapping to safe zone.")
-            x = round(left_boundary + constants.layout.DEFAULT_PADDING)
+
+        taskbar_anchor = config.get(
+            'taskbar_anchor',
+            constants.config.defaults.DEFAULT_TASKBAR_ANCHOR,
+        )
+        if taskbar_anchor == "left":
+            # On Windows 11 centered taskbars this uses the empty left side of
+            # the taskbar and stops before the app-icons/task-list region.
+            left_boundary = full_geom.left()
+            right_boundary = round(tasklist_rect[0] / dpi_scale) if tasklist_rect else (full_geom.right() + 1)
+            x = round(left_boundary + offset)
+
+            if x + widget_width > right_boundary:
+                logger.warning("Calculated left-side position overlaps app icons; snapping to safe zone.")
+                x = round(max(left_boundary, right_boundary - widget_width - constants.layout.DEFAULT_PADDING))
+        else:
+            # right_boundary is the left edge of the tray/notification area when available.
+            right_boundary = round(tray_rect[0] / dpi_scale) if tray_rect else (full_geom.right() + 1)
+
+            # left_boundary is the right edge of the task list/app-icons region when available.
+            left_boundary = round(tasklist_rect[2] / dpi_scale) if tasklist_rect else full_geom.left()
+
+            x = round(right_boundary - widget_width - offset)
+
+            # Safety check: don't overlap with app icons on left
+            if x < left_boundary:
+                logger.warning("Calculated position overlaps app icons; snapping to safe zone.")
+                x = round(left_boundary + constants.layout.DEFAULT_PADDING)
         
         return x, y
 
@@ -349,7 +365,13 @@ class PositionCalculator:
         except Exception:
             return ScreenPosition(0, 0)
 
-    def constrain_drag_position(self, desired_pos: QPoint, taskbar_info: TaskbarInfo, widget_size_q: QSize) -> Optional[QPoint]:
+    def constrain_drag_position(
+        self,
+        desired_pos: QPoint,
+        taskbar_info: TaskbarInfo,
+        widget_size_q: QSize,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> Optional[QPoint]:
         """Constrains a desired widget position during dragging to the 'safe zone'."""
         try:
             screen = taskbar_info.get_screen()
@@ -374,8 +396,27 @@ class PositionCalculator:
                     vis_bot = round(taskbar_info.rect[3] / dpi_scale)
                 fixed_y = round((vis_top + vis_bot) / 2.0 - widget_height / 2.0)
                 
-                right_boundary = (round(taskbar_info.get_tray_rect()[0] / dpi_scale) - widget_width) if taskbar_info.get_tray_rect() else (screen.geometry().right() - widget_width)
-                left_boundary = (round(taskbar_info.tasklist_rect[2] / dpi_scale) + constants.layout.DEFAULT_PADDING) if taskbar_info.tasklist_rect else screen.geometry().left()
+                taskbar_anchor = (config or {}).get(
+                    'taskbar_anchor',
+                    constants.config.defaults.DEFAULT_TASKBAR_ANCHOR,
+                )
+
+                if taskbar_anchor == "left":
+                    left_boundary = screen.geometry().left()
+                    if taskbar_info.tasklist_rect:
+                        right_boundary = (
+                            round(taskbar_info.tasklist_rect[0] / dpi_scale)
+                            - widget_width
+                            - constants.layout.DEFAULT_PADDING
+                        )
+                    elif taskbar_info.get_tray_rect():
+                        right_boundary = round(taskbar_info.get_tray_rect()[0] / dpi_scale) - widget_width
+                    else:
+                        right_boundary = screen.geometry().right() - widget_width
+                    right_boundary = max(left_boundary, right_boundary)
+                else:
+                    right_boundary = (round(taskbar_info.get_tray_rect()[0] / dpi_scale) - widget_width) if taskbar_info.get_tray_rect() else (screen.geometry().right() - widget_width)
+                    left_boundary = (round(taskbar_info.tasklist_rect[2] / dpi_scale) + constants.layout.DEFAULT_PADDING) if taskbar_info.tasklist_rect else screen.geometry().left()
                 
                 constrained_x = max(left_boundary, min(desired_pos.x(), right_boundary))
                 return QPoint(constrained_x, fixed_y)
@@ -618,7 +659,8 @@ class PositionManager(QObject):
         res = self._calculator.constrain_drag_position(
             pos, 
             self._state.taskbar_info, 
-            self._state.widget.size()
+            self._state.widget.size(),
+            self._state.config,
         )
         return res if res else pos
 

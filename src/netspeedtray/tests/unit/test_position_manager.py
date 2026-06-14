@@ -40,6 +40,29 @@ class TestPositionCalculator(unittest.TestCase):
         self.assertEqual(pos.x, 1595)
         self.assertEqual(pos.y, 1040)
 
+    def test_calculate_position_bottom_left_anchor(self):
+        """Left anchor uses the open left side of a centered Windows taskbar."""
+        widget_size = (100, 40)
+        self.mock_taskbar.tasklist_rect = (640, 1040, 1500, 1080)
+        config = {'tray_offset_x': 20, 'taskbar_anchor': 'left'}
+
+        pos = self.calculator.calculate_position(self.mock_taskbar, widget_size, config)
+
+        self.assertEqual(pos.x, 20)
+        self.assertEqual(pos.y, 1040)
+
+    def test_calculate_position_bottom_left_anchor_avoids_tasklist(self):
+        """Left anchor clamps before the app-icons/task-list area."""
+        widget_size = (100, 40)
+        self.mock_taskbar.tasklist_rect = (150, 1040, 1500, 1080)
+        config = {'tray_offset_x': 80, 'taskbar_anchor': 'left'}
+
+        pos = self.calculator.calculate_position(self.mock_taskbar, widget_size, config)
+
+        expected_x = 150 - widget_size[0] - constants.layout.DEFAULT_PADDING
+        self.assertEqual(pos.x, expected_x)
+        self.assertEqual(pos.y, 1040)
+
     def test_calculate_position_fallback(self):
         """Test fallback when taskbar is invalid."""
         self.mock_taskbar.hwnd = 0 # Invalid
@@ -73,6 +96,20 @@ class TestPositionCalculator(unittest.TestCase):
         
         self.assertEqual(constrained.y(), 1040)
         self.assertEqual(constrained.x(), 500)
+
+    def test_constrain_drag_bottom_left_anchor(self):
+        """Left anchor drag stays in the left-side safe zone."""
+        widget_size = QSize(100, 40)
+        desired_pos = QPoint(1000, 500)
+        self.mock_taskbar.tasklist_rect = (640, 1040, 1500, 1080)
+
+        constrained = self.calculator.constrain_drag_position(
+            desired_pos, self.mock_taskbar, widget_size, {'taskbar_anchor': 'left'}
+        )
+
+        expected_max_x = 640 - widget_size.width() - constants.layout.DEFAULT_PADDING
+        self.assertEqual(constrained.y(), 1040)
+        self.assertEqual(constrained.x(), expected_max_x)
 
     def test_widget_size_exceeds_max_width(self):
         """Verify oversized widget width is clamped to max allowed."""

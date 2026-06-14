@@ -111,31 +111,40 @@ class InputHandler(QObject):
                 from netspeedtray.utils.taskbar_utils import get_taskbar_info
                 from netspeedtray import constants
                 
-                tb_info = get_taskbar_info()
+                tb_info = get_taskbar_info(preferred_screen_name=config.get("preferred_monitor"))
                 edge = tb_info.get_edge_position()
                 dpi_scale = tb_info.dpi_scale if tb_info.dpi_scale > 0 else 1.0
                 
                 if edge in (constants.taskbar.edge.BOTTOM, constants.taskbar.edge.TOP):
-                    # Horizontal Taskbar: Variable is X offset from RIGHT side
-                    # Offset = RightBoundary - WidgetRight
-                    # Logic matches PositionCalculator: x = right_boundary - widget_width - offset
-                    # So: offset = right_boundary - x - widget_width
-                    
-                    # Calculate Right Boundary (tray left or screen right edge)
-                    tray_rect = tb_info.get_tray_rect()
-                    if tray_rect:
-                        right_boundary = tray_rect[0] / dpi_scale
-                    else:
-                        screen = tb_info.get_screen()
-                        right_boundary = float(screen.geometry().right() + 1) if screen else (tb_info.rect[2] / dpi_scale)
-                    
-                    # Current Widget X
-                    current_x_log = self.widget.pos().x() # Use logical pos from pos()
+                    current_x_log = self.widget.pos().x()  # Use logical pos from pos()
                     widget_width = self.widget.width()
-                    
-                    new_offset = int(right_boundary - current_x_log - widget_width)
+
+                    taskbar_anchor = config.get(
+                        "taskbar_anchor",
+                        constants.config.defaults.DEFAULT_TASKBAR_ANCHOR,
+                    )
+                    if taskbar_anchor == "left":
+                        screen = tb_info.get_screen()
+                        left_boundary = float(screen.geometry().left()) if screen else (tb_info.rect[0] / dpi_scale)
+                        new_offset = int(current_x_log - left_boundary)
+                        self.logger.debug(f"Saved Left Horizontal Offset: {new_offset} (LeftBound={left_boundary}, X={current_x_log})")
+                    else:
+                        # Horizontal Taskbar: Variable is X offset from RIGHT side
+                        # Offset = RightBoundary - WidgetRight
+                        # Logic matches PositionCalculator: x = right_boundary - widget_width - offset
+                        # So: offset = right_boundary - x - widget_width
+                        tray_rect = tb_info.get_tray_rect()
+                        if tray_rect:
+                            right_boundary = tray_rect[0] / dpi_scale
+                        else:
+                            screen = tb_info.get_screen()
+                            right_boundary = float(screen.geometry().right() + 1) if screen else (tb_info.rect[2] / dpi_scale)
+
+                        new_offset = int(right_boundary - current_x_log - widget_width)
+                        self.logger.debug(f"Saved Horizontal Offset: {new_offset} (RightBound={right_boundary}, X={current_x_log}, W={widget_width})")
+
+                    new_offset = max(0, new_offset)
                     updates["tray_offset_x"] = new_offset
-                    self.logger.debug(f"Saved Horizontal Offset: {new_offset} (RightBound={right_boundary}, X={current_x_log}, W={widget_width})")
                     
                 elif edge in (constants.taskbar.edge.LEFT, constants.taskbar.edge.RIGHT):
                     # Vertical Taskbar: Variable is Y offset from BOTTOM

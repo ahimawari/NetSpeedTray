@@ -81,27 +81,34 @@ class GeneralPage(QWidget):
         behavior_layout.addWidget(kvf_label, 2, 0, Qt.AlignmentFlag.AlignVCenter)
         behavior_layout.addWidget(self.keep_visible_fullscreen, 2, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
+        behavior_layout.addWidget(QLabel(self.i18n.TASKBAR_ANCHOR_LABEL), 3, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.taskbar_anchor_combo = QComboBox()
+        self.taskbar_anchor_combo.addItem(self.i18n.TASKBAR_ANCHOR_TRAY, userData="tray")
+        self.taskbar_anchor_combo.addItem(self.i18n.TASKBAR_ANCHOR_LEFT, userData="left")
+        self.taskbar_anchor_combo.currentIndexChanged.connect(self.on_change)
+        behavior_layout.addWidget(self.taskbar_anchor_combo, 3, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
         # Tray Offset (absorbed from Display page)
-        behavior_layout.addWidget(QLabel(self.i18n.TRAY_OFFSET_LABEL), 3, 0, Qt.AlignmentFlag.AlignVCenter)
+        behavior_layout.addWidget(QLabel(self.i18n.TRAY_OFFSET_LABEL), 4, 0, Qt.AlignmentFlag.AlignVCenter)
         self.tray_offset = Win11Slider()
         self.tray_offset.setRange(0, 50)
         self.tray_offset.valueChanged.connect(self.on_change)
-        behavior_layout.addWidget(self.tray_offset, 3, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        behavior_layout.addWidget(self.tray_offset, 4, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         cfu_label = QLabel(self.i18n.CHECK_FOR_UPDATES_LABEL)
         self.check_for_updates = Win11Toggle(label_text="")
         self.check_for_updates.toggled.connect(self.on_change)
 
-        behavior_layout.addWidget(cfu_label, 4, 0, Qt.AlignmentFlag.AlignVCenter)
-        behavior_layout.addWidget(self.check_for_updates, 4, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        behavior_layout.addWidget(cfu_label, 5, 0, Qt.AlignmentFlag.AlignVCenter)
+        behavior_layout.addWidget(self.check_for_updates, 5, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         # Preferred Monitor (#72) — lets users pin the widget to a specific
         # display in multi-monitor setups. Default (no selection) uses primary.
-        behavior_layout.addWidget(QLabel(self.i18n.PREFERRED_MONITOR_LABEL), 5, 0, Qt.AlignmentFlag.AlignVCenter)
+        behavior_layout.addWidget(QLabel(self.i18n.PREFERRED_MONITOR_LABEL), 6, 0, Qt.AlignmentFlag.AlignVCenter)
         self.preferred_monitor_combo = QComboBox()
         self._populate_monitor_combo()
         self.preferred_monitor_combo.currentIndexChanged.connect(self.on_change)
-        behavior_layout.addWidget(self.preferred_monitor_combo, 5, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        behavior_layout.addWidget(self.preferred_monitor_combo, 6, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         behavior_layout.setColumnStretch(0, 0)
         behavior_layout.setColumnStretch(1, 1)
@@ -182,6 +189,10 @@ class GeneralPage(QWidget):
         self.keep_visible_fullscreen.setChecked(config.get("keep_visible_fullscreen", constants.config.defaults.DEFAULT_KEEP_VISIBLE_FULLSCREEN))
         self.check_for_updates.setChecked(config.get("check_for_updates", True))
 
+        taskbar_anchor = config.get("taskbar_anchor", constants.config.defaults.DEFAULT_TASKBAR_ANCHOR)
+        idx = self.taskbar_anchor_combo.findData(taskbar_anchor)
+        self.taskbar_anchor_combo.setCurrentIndex(idx if idx >= 0 else 0)
+
         # Tray Offset
         self.tray_offset.setValue(config.get("tray_offset_x", 0))
 
@@ -204,6 +215,7 @@ class GeneralPage(QWidget):
             "free_move": self.free_move.isChecked(),
             "keep_visible_fullscreen": self.keep_visible_fullscreen.isChecked(),
             "start_with_windows": self.start_with_windows.isChecked(),
+            "taskbar_anchor": self.taskbar_anchor_combo.currentData(),
             "tray_offset_x": self.tray_offset.value(),
             "check_for_updates": self.check_for_updates.isChecked(),
             "preferred_monitor": self.preferred_monitor_combo.currentData(),

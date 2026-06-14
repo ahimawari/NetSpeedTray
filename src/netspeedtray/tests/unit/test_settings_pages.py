@@ -62,6 +62,9 @@ def mock_i18n():
     i18n.FIXED_WIDTH_VALUES_LABEL = "Fixed Width"
     i18n.HIDE_ARROWS_LABEL = "Hide Arrows"
     i18n.HIDE_UNIT_SUFFIX_LABEL = "Hide Units"
+    i18n.TASKBAR_ANCHOR_LABEL = "Taskbar Position"
+    i18n.TASKBAR_ANCHOR_TRAY = "Tray Side"
+    i18n.TASKBAR_ANCHOR_LEFT = "Left Side"
     i18n.TRAY_OFFSET_LABEL = "Offset"
     i18n.NETWORK_INTERFACES_GROUP = "Interfaces"
     i18n.MONITORING_MODE_LABEL = "Mode"
@@ -133,6 +136,7 @@ def test_general_page(q_app, mock_i18n, mock_callback):
         "update_rate": 2.0,
         "free_move": True,
         "start_with_windows": True,
+        "taskbar_anchor": "left",
         "tray_offset_x": 15
     }
 
@@ -143,6 +147,7 @@ def test_general_page(q_app, mock_i18n, mock_callback):
     assert settings["update_rate"] == 2.0
     assert settings["free_move"] is True
     assert settings["start_with_windows"] is True
+    assert settings["taskbar_anchor"] == "left"
     assert settings["tray_offset_x"] == 15
 
     # Test with Smart mode (update_rate = -1.0)
@@ -158,6 +163,7 @@ def test_general_page(q_app, mock_i18n, mock_callback):
     assert settings_smart["update_rate"] == -1.0  # Smart mode
     assert settings_smart["language"] == "en_US"
     assert settings_smart["free_move"] is False
+    assert settings_smart["taskbar_anchor"] == "tray"
     assert settings_smart["tray_offset_x"] == 0
 
 def test_appearance_page(q_app, mock_i18n, mock_callback):

@@ -78,6 +78,7 @@ class ConfigConstants:
     DEFAULT_START_WITH_WINDOWS: Final[bool] = False
     DEFAULT_TRAY_OFFSET_X: Final[int] = 0
     DEFAULT_TRAY_OFFSET_Y: Final[int] = 3
+    DEFAULT_TASKBAR_ANCHOR: Final[str] = "tray"
     DEFAULT_LEGEND_POSITION: Final[str] = data.legend_position.DEFAULT_LEGEND_POSITION
     DEFAULT_SHOW_LEGEND: Final[bool] = False
     
@@ -143,6 +144,7 @@ class ConfigConstants:
         "background_color": DEFAULT_BACKGROUND_COLOR,
         "background_opacity": DEFAULT_BACKGROUND_OPACITY,
         "short_unit_labels": DEFAULT_SHORT_UNIT_LABELS,
+        "taskbar_anchor": DEFAULT_TASKBAR_ANCHOR,
         "tray_offset_x": DEFAULT_TRAY_OFFSET_X,
         "tray_offset_y": DEFAULT_TRAY_OFFSET_Y,
         "graph_window_pos": None,
@@ -222,6 +224,7 @@ class ConfigConstants:
         "background_color": {"type": str, "default": DEFAULT_BACKGROUND_COLOR, "regex": r"#[0-9a-fA-F]{6}"},
         "background_opacity": {"type": int, "default": DEFAULT_BACKGROUND_OPACITY, "min": 0, "max": 100},
         "short_unit_labels": {"type": bool, "default": DEFAULT_SHORT_UNIT_LABELS},
+        "taskbar_anchor": {"type": str, "default": DEFAULT_TASKBAR_ANCHOR, "choices": ["tray", "left"]},
         "tray_offset_x": {"type": int, "default": DEFAULT_TRAY_OFFSET_X, "min": 0, "max": 500},
         "tray_offset_y": {"type": int, "default": DEFAULT_TRAY_OFFSET_Y, "min": 0, "max": 500},
         "graph_window_pos": {"type": (dict, type(None)), "default": None},
