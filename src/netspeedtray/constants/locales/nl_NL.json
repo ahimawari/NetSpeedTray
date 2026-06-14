@@ -87,6 +87,7 @@
     "HARDWARE_LABEL_STYLE_MONOCHROME_ICONS": "Monochrome pictogrammen (wit)",
     "HARDWARE_LABEL_STYLE_TEXT_LABELS": "Tekstlabels (CPU, GPU)",
     "WIDGET_DISPLAY_MODE_LABEL": "Widget weergavemodus",
+    "WIDGET_SEGMENT_GAP_LABEL": "Segment Gap",
     "DISPLAY_MODE_NETWORK": "Alleen netwerk",
     "DISPLAY_MODE_CPU": "Alleen CPU",
     "DISPLAY_MODE_GPU": "Alleen GPU",

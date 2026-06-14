@@ -94,6 +94,7 @@ class ConfigConstants:
     DEFAULT_WIDGET_DISPLAY_MODE: Final[str] = "side_by_side" # Choices: network_only, cycle, side_by_side
     DEFAULT_WIDGET_DISPLAY_ORDER: Final[List[str]] = ["network", "cpu", "gpu"]
     DEFAULT_WIDGET_CYCLE_INTERVAL: Final[int] = 3 # Seconds
+    DEFAULT_WIDGET_SEGMENT_GAP: Final[int] = 6
     DEFAULT_CPU_LOAD_HIGH_THRESHOLD: Final[float] = 80.0
     DEFAULT_CPU_LOAD_LOW_THRESHOLD: Final[float] = 50.0
     DEFAULT_GPU_LOAD_HIGH_THRESHOLD: Final[float] = 80.0
@@ -165,6 +166,7 @@ class ConfigConstants:
         "widget_display_mode": DEFAULT_WIDGET_DISPLAY_MODE,
         "widget_display_order": DEFAULT_WIDGET_DISPLAY_ORDER,
         "widget_cycle_interval": DEFAULT_WIDGET_CYCLE_INTERVAL,
+        "widget_segment_gap": DEFAULT_WIDGET_SEGMENT_GAP,
         "cpu_load_high_threshold": DEFAULT_CPU_LOAD_HIGH_THRESHOLD,
         "cpu_load_low_threshold": DEFAULT_CPU_LOAD_LOW_THRESHOLD,
         "gpu_load_high_threshold": DEFAULT_GPU_LOAD_HIGH_THRESHOLD,
@@ -241,6 +243,7 @@ class ConfigConstants:
         "widget_display_mode": {"type": str, "default": DEFAULT_WIDGET_DISPLAY_MODE, "choices": ["network_only", "cycle", "side_by_side"]},
         "widget_display_order": {"type": list, "default": DEFAULT_WIDGET_DISPLAY_ORDER, "item_type": str},
         "widget_cycle_interval": {"type": int, "default": DEFAULT_WIDGET_CYCLE_INTERVAL, "min": 1, "max": 60},
+        "widget_segment_gap": {"type": int, "default": DEFAULT_WIDGET_SEGMENT_GAP, "min": 0, "max": 40},
         "cpu_load_high_threshold": {"type": (int, float), "default": DEFAULT_CPU_LOAD_HIGH_THRESHOLD, "min": 0, "max": 100},
         "cpu_load_low_threshold": {"type": (int, float), "default": DEFAULT_CPU_LOAD_LOW_THRESHOLD, "min": 0, "max": 100},
         "gpu_load_high_threshold": {"type": (int, float), "default": DEFAULT_GPU_LOAD_HIGH_THRESHOLD, "min": 0, "max": 100},

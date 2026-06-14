@@ -87,6 +87,7 @@
     "HARDWARE_LABEL_STYLE_MONOCHROME_ICONS": "Enobarvne ikone (bela)",
     "HARDWARE_LABEL_STYLE_TEXT_LABELS": "Besedilne oznake (CPU, GPU)",
     "WIDGET_DISPLAY_MODE_LABEL": "Način prikaza gradnika",
+    "WIDGET_SEGMENT_GAP_LABEL": "Segment Gap",
     "DISPLAY_MODE_NETWORK": "Samo omrežje",
     "DISPLAY_MODE_CPU": "Samo CPU",
     "DISPLAY_MODE_GPU": "Samo GPU",

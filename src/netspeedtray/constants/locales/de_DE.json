@@ -87,6 +87,7 @@
     "HARDWARE_LABEL_STYLE_MONOCHROME_ICONS": "Monochrome Symbole (Weiß)",
     "HARDWARE_LABEL_STYLE_TEXT_LABELS": "Textbeschriftung (CPU, GPU)",
     "WIDGET_DISPLAY_MODE_LABEL": "Anzeigemodus des Widgets",
+    "WIDGET_SEGMENT_GAP_LABEL": "Segment Gap",
     "DISPLAY_MODE_NETWORK": "Nur Netzwerk",
     "DISPLAY_MODE_CPU": "Nur CPU",
     "DISPLAY_MODE_GPU": "Nur GPU",

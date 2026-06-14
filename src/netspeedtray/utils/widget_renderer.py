@@ -62,6 +62,7 @@ class RenderConfig:
     hardware_label_style: str = "icons_colored"
     widget_display_mode: str = "network_only"
     widget_display_order: List[str] = field(default_factory=lambda: ["network", "cpu", "gpu"])
+    widget_segment_gap: int = constants.config.defaults.DEFAULT_WIDGET_SEGMENT_GAP
     show_hardware_temps: bool = False
     show_hardware_power: bool = False
 
@@ -127,6 +128,7 @@ class RenderConfig:
                 stack_hardware_stats=bool(config.get('stack_hardware_stats', False)),
                 widget_display_mode=str(config.get('widget_display_mode', 'network_only')),
                 widget_display_order=list(config.get('widget_display_order', ["network", "cpu", "gpu"])),
+                widget_segment_gap=int(config.get('widget_segment_gap', constants.config.defaults.DEFAULT_WIDGET_SEGMENT_GAP)),
                 show_hardware_temps=bool(config.get('show_hardware_temps', False)),
                 show_hardware_power=bool(config.get('show_hardware_power', False))
             )

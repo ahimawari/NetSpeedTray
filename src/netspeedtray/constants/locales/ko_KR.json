@@ -87,6 +87,7 @@
     "HARDWARE_LABEL_STYLE_MONOCHROME_ICONS": "단색 아이콘 (흰색)",
     "HARDWARE_LABEL_STYLE_TEXT_LABELS": "텍스트 레이블 (CPU, GPU)",
     "WIDGET_DISPLAY_MODE_LABEL": "위젯 표시 모드",
+    "WIDGET_SEGMENT_GAP_LABEL": "Segment Gap",
     "DISPLAY_MODE_NETWORK": "네트워크 전용",
     "DISPLAY_MODE_CPU": "CPU 전용",
     "DISPLAY_MODE_GPU": "GPU 전용",

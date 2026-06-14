@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QComboBox, QLabel, QGridLayout
 
 from netspeedtray import constants
-from netspeedtray.utils.components import Win11Toggle, CollapsibleSection
+from netspeedtray.utils.components import Win11Toggle, Win11Slider, CollapsibleSection
 
 class HardwarePage(QWidget):
     layout_changed = pyqtSignal()
@@ -96,6 +96,20 @@ class HardwarePage(QWidget):
         self.display_mode_combo.currentIndexChanged.connect(self.on_change)
         display_section.contentLayout().addWidget(self.display_mode_combo)
 
+        gap_layout = QGridLayout()
+        gap_layout.setVerticalSpacing(10)
+        gap_layout.setHorizontalSpacing(8)
+        gap_layout.addWidget(QLabel(self.i18n.WIDGET_SEGMENT_GAP_LABEL), 0, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.segment_gap = Win11Slider(
+            min_value=0,
+            max_value=40,
+            value=constants.config.defaults.DEFAULT_WIDGET_SEGMENT_GAP,
+            suffix=" px",
+        )
+        self.segment_gap.valueChanged.connect(self.on_change)
+        gap_layout.addWidget(self.segment_gap, 0, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        display_section.contentLayout().addLayout(gap_layout)
+
         note_label = QLabel(self.i18n.HARDWARE_GRAPH_NOTE)
         note_label.setWordWrap(True)
         note_label.setStyleSheet("color: gray; font-size: 10px;")
@@ -163,6 +177,8 @@ class HardwarePage(QWidget):
         index = self.display_mode_combo.findData(mode)
         if index >= 0:
             self.display_mode_combo.setCurrentIndex(index)
+
+        self.segment_gap.setValue(config.get("widget_segment_gap", constants.config.defaults.DEFAULT_WIDGET_SEGMENT_GAP))
             
         order = config.get("widget_display_order", ["network", "cpu", "gpu"])
         for i, combo in enumerate(self.pos_combos):
@@ -218,5 +234,6 @@ class HardwarePage(QWidget):
             "hardware_label_style": self.label_style.currentData(),
             "stack_hardware_stats": mode == "side_by_stack",
             "widget_display_mode": "side_by_side" if mode == "side_by_stack" else mode,
-            "widget_display_order": order
+            "widget_display_order": order,
+            "widget_segment_gap": self.segment_gap.value()
         }

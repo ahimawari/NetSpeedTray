@@ -661,6 +661,8 @@ class NetworkSpeedWidget(QWidget):
         if not active_keys: active_keys = ["network"]
         
         current_x = 0
+        segment_gap = int(getattr(config, 'widget_segment_gap', constants.config.defaults.DEFAULT_WIDGET_SEGMENT_GAP))
+        segment_gap = max(0, min(40, segment_gap))
         
         for key in active_keys:
             if key == "network":
@@ -688,7 +690,7 @@ class NetworkSpeedWidget(QWidget):
                 self.renderer.draw_hardware_stats(painter, self.cpu_usage, self.gpu_usage, self.width(), self.height(), config, self.cpu_temp, self.gpu_temp, ram, vram, layout, x_offset=current_x, cpu_power=self.cpu_power, gpu_power=self.gpu_power)
             
             if key == "network":
-                current_x += getattr(self.layout_manager, '_network_width', self.renderer.get_last_text_rect().width()) + constants.layout.WIDGET_SEGMENT_GAP_AFTER_NETWORK_PX
+                current_x += getattr(self.layout_manager, '_network_width', self.renderer.get_last_text_rect().width()) + segment_gap
             else:
                 current_x += self.renderer.get_last_text_rect().width() + constants.layout.WIDGET_SEGMENT_GAP_BETWEEN_HARDWARE_PX
 

@@ -12,6 +12,7 @@ from netspeedtray.views.settings.pages.appearance import AppearancePage
 from netspeedtray.views.settings.pages.units import UnitsPage
 from netspeedtray.views.settings.pages.interfaces import InterfacesPage
 from netspeedtray.views.settings.pages.colors import ColorsPage
+from netspeedtray.views.settings.pages.hardware import HardwarePage
 from netspeedtray import constants
 
 @pytest.fixture(scope="session")
@@ -104,6 +105,32 @@ def mock_i18n():
     i18n.MONITORING_MODE_PHYSICAL_SUBTITLE = "Excludes VPNs and virtual adapters"
     i18n.MONITORING_MODE_VIRTUAL_SUBTITLE = "Includes VPNs, virtual adapters, and tunnels"
     i18n.MONITORING_MODE_SELECTED_SUBTITLE = "Choose specific interfaces from the list below"
+    i18n.HARDWARE_MONITORING_GROUP = "Hardware"
+    i18n.MONITOR_CPU_LABEL = "Monitor CPU"
+    i18n.MONITOR_GPU_LABEL = "Monitor GPU"
+    i18n.MONITOR_RAM_LABEL = "Show RAM"
+    i18n.MONITOR_VRAM_LABEL = "Show VRAM"
+    i18n.SHOW_HARDWARE_TEMPS_LABEL = "Show temps"
+    i18n.SHOW_HARDWARE_POWER_LABEL = "Show power"
+    i18n.HARDWARE_TEMPS_LIMITATION_NOTE = "Temperature note"
+    i18n.HARDWARE_LABEL_STYLE_COLORED_ICONS = "Colored icons"
+    i18n.HARDWARE_LABEL_STYLE_MONOCHROME_ICONS = "Monochrome icons"
+    i18n.HARDWARE_LABEL_STYLE_TEXT_LABELS = "Text labels"
+    i18n.WIDGET_DISPLAY_MODE_LABEL = "Widget Display Mode"
+    i18n.WIDGET_SEGMENT_GAP_LABEL = "Segment Gap"
+    i18n.DISPLAY_MODE_NETWORK = "Network only"
+    i18n.DISPLAY_MODE_COMBINED = "Side by side"
+    i18n.DISPLAY_MODE_STACKED_COLUMN = "Stacked"
+    i18n.DISPLAY_MODE_CYCLE = "Cycle"
+    i18n.WIDGET_DISPLAY_ORDER_LABEL = "Display Order"
+    i18n.ORDER_POSITION_1 = "Position 1"
+    i18n.ORDER_POSITION_2 = "Position 2"
+    i18n.ORDER_POSITION_3 = "Position 3"
+    i18n.ORDER_TYPE_NETWORK = "Network"
+    i18n.ORDER_TYPE_CPU = "CPU"
+    i18n.ORDER_TYPE_GPU = "GPU"
+    i18n.ORDER_TYPE_NONE = "None"
+    i18n.HARDWARE_GRAPH_NOTE = "Graph note"
 
     # For GeneralPage update rate slider
     i18n.SMART_MODE_LABEL = "Smart"
@@ -219,6 +246,33 @@ def test_colors_page(q_app, mock_i18n, mock_callback):
     assert settings["low_speed_threshold"] == 10
     assert settings["high_speed_color"] == "#00FF00"
     assert settings["low_speed_color"] == "#FFFF00"
+
+def test_hardware_page_segment_gap(q_app, mock_i18n, mock_callback):
+    """Test HardwarePage segment gap load and save."""
+    page = HardwarePage(mock_i18n, mock_callback)
+
+    config = {
+        "monitor_cpu_enabled": True,
+        "monitor_gpu_enabled": True,
+        "monitor_ram_enabled": True,
+        "monitor_vram_enabled": True,
+        "show_hardware_temps": True,
+        "show_hardware_power": False,
+        "hardware_label_style": "icons_monochrome",
+        "stack_hardware_stats": True,
+        "widget_display_mode": "side_by_side",
+        "widget_display_order": ["network", "cpu", "gpu"],
+        "widget_segment_gap": 4,
+    }
+
+    page.load_settings(config)
+    settings = page.get_settings()
+
+    assert settings["monitor_cpu_enabled"] is True
+    assert settings["monitor_gpu_enabled"] is True
+    assert settings["stack_hardware_stats"] is True
+    assert settings["widget_display_mode"] == "side_by_side"
+    assert settings["widget_segment_gap"] == 4
 
 def test_units_page(q_app, mock_i18n, mock_callback):
     """Test UnitsPage."""

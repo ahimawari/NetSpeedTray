@@ -198,6 +198,8 @@ class WidgetLayoutManager:
                     
                     # Ensure at least 1 segment
                     active_segments = max(1, active_segments)
+                    segment_gap = int(self.widget.config.get("widget_segment_gap", constants.config.defaults.DEFAULT_WIDGET_SEGMENT_GAP))
+                    segment_gap = max(0, min(40, segment_gap))
                     
                     calculated_width_accum = 0
                     if "network" in display_order:
@@ -260,7 +262,7 @@ class WidgetLayoutManager:
                         
                     gaps = 0
                     if "network" in display_order and (monitor_cpu or monitor_gpu):
-                        gaps += constants.layout.WIDGET_SEGMENT_GAP_AFTER_NETWORK_PX # Gap after Network
+                        gaps += segment_gap # Gap after Network
                     if monitor_cpu and monitor_gpu and not stack_hw:
                         gaps += constants.layout.WIDGET_SEGMENT_GAP_BETWEEN_HARDWARE_PX  # Gap between CPU and GPU
                     calculated_width = calculated_width_accum + gaps
