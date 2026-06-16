@@ -609,6 +609,8 @@ class NetworkSpeedWidget(QWidget):
         """Draws the mini-graph background layer based on current mode."""
         if mode == "side_by_side":
             return  # Handled inside the segment renderer loop for accurate width scoping
+        if mode == "network_only" and getattr(config, 'hardware_label_style', '') == "stats_blocks":
+            return
         elif mode == "cpu_only":
             history = list(self.widget_state.cpu_history)
             self.renderer.draw_mini_graph(painter, self.width(), self.height(), config, history, layout, is_hardware=True, hardware_color=constants.graph.CPU_LINE_COLOR)
@@ -666,7 +668,7 @@ class NetworkSpeedWidget(QWidget):
         
         for key in active_keys:
             if key == "network":
-                if config.graph_enabled:
+                if config.graph_enabled and getattr(config, 'hardware_label_style', '') != "stats_blocks":
                     painter.save()
                     # Offset the canvas to draw graph only behind the network segment
                     painter.translate(current_x, 0)

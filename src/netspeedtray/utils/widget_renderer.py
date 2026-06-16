@@ -254,6 +254,20 @@ class WidgetRenderer:
                 short_labels=config.short_unit_labels, split_unit=True
             )
 
+            if getattr(config, "hardware_label_style", "") == "stats_blocks":
+                self._draw_network_stats_block(
+                    painter,
+                    upload,
+                    download,
+                    up_val,
+                    dw_val,
+                    width,
+                    height,
+                    config,
+                    x_offset,
+                )
+                return
+
             painter.setFont(self.font)
             line_height = self.metrics.height()
             ascent = self.metrics.ascent()
@@ -356,6 +370,123 @@ class WidgetRenderer:
         # 3. Draw Unit
         if not config.hide_unit_suffix:
             painter.drawText(unit_x, y, unit)
+
+    def _draw_network_stats_block(self, painter: QPainter, upload: float, download: float,
+                                  up_val: str, down_val: str, width: int, height: int,
+                                  config: RenderConfig, x_offset: int) -> None:
+        """Draws a compact top/bottom bidirectional upload/download bar block."""
+        painter.save()
+        try:
+            label_w = constants.renderer.STATS_BLOCK_LABEL_WIDTH
+            graph_w = constants.renderer.STATS_BLOCK_GRAPH_WIDTH
+            inner_gap = constants.renderer.STATS_BLOCK_INNER_GAP
+            block_w = label_w + inner_gap + graph_w
+            margin = constants.renderer.TEXT_MARGIN
+            block_h = max(
+                constants.renderer.STATS_BLOCK_MIN_HEIGHT,
+                min(height - 4, self.metrics.height() * 2 + 1),
+            )
+            top = int((height - block_h) / 2)
+            x = x_offset + margin
+            label_rect = QRect(x, top, label_w, block_h)
+            graph_rect = QRect(
+                x + label_w + inner_gap,
+                top + 2,
+                graph_w,
+                max(4, block_h - 4),
+            )
+
+            upload_color = QColor(constants.graph.UPLOAD_LINE_COLOR).lighter(130)
+            download_color = QColor(constants.graph.DOWNLOAD_LINE_COLOR).lighter(125)
+            accent = QColor(constants.graph.UPLOAD_LINE_COLOR).lighter(125)
+            self._draw_vertical_block_label(painter, "NET", label_rect, accent, self._stats_label_color(True), True)
+
+            frame_fill = QColor(3, 6, 10)
+            frame_fill.setAlpha(236)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(frame_fill)
+            painter.drawRoundedRect(graph_rect, 2, 2)
+
+            border = QColor(170, 220, 255)
+            border.setAlpha(210)
+            painter.setPen(QPen(border, 1))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(graph_rect, 2, 2)
+
+            top_bytes, bottom_bytes = (download, upload) if config.swap_upload_download else (upload, download)
+            top_text, bottom_text = (down_val, up_val) if config.swap_upload_download else (up_val, down_val)
+            top_color, bottom_color = (download_color, upload_color) if config.swap_upload_download else (upload_color, download_color)
+            self._draw_network_bidirectional_bars(
+                painter,
+                graph_rect.adjusted(2, 2, -2, -2),
+                max(0.0, float(top_bytes)),
+                max(0.0, float(bottom_bytes)),
+                top_color,
+                bottom_color,
+            )
+            self._draw_network_value_overlay(painter, graph_rect.adjusted(1, 1, -1, -1), top_text, bottom_text)
+
+            self._last_text_rect = QRect(x_offset, top, block_w + (margin * 2), block_h)
+        finally:
+            painter.restore()
+
+    def _draw_network_bidirectional_bars(self, painter: QPainter, rect: QRect, top_value: float,
+                                         bottom_value: float, top_color: QColor, bottom_color: QColor) -> None:
+        """Draws upload/download as two stacked horizontal bars."""
+        if rect.width() <= 2 or rect.height() <= 4:
+            return
+
+        baseline_y = rect.top() + rect.height() // 2
+        top_area_h = max(1, baseline_y - rect.top() - 1)
+        bottom_area_h = max(1, rect.bottom() - baseline_y - 1)
+        scale = max(top_value, bottom_value, 1.0)
+        bar_w = max(4, rect.width() - 2)
+        bar_x = rect.left() + 1
+
+        top_bg = QColor(top_color)
+        top_bg.setAlpha(40)
+        painter.fillRect(QRect(bar_x, rect.top(), bar_w, top_area_h), top_bg)
+        bottom_bg = QColor(bottom_color)
+        bottom_bg.setAlpha(40)
+        painter.fillRect(QRect(bar_x, baseline_y + 1, bar_w, bottom_area_h), bottom_bg)
+
+        top_w = int(bar_w * min(1.0, top_value / scale))
+        bottom_w = int(bar_w * min(1.0, bottom_value / scale))
+        if top_w > 0:
+            fill = QColor(top_color)
+            fill.setAlpha(245)
+            painter.fillRect(QRect(bar_x, rect.top(), top_w, top_area_h), fill)
+        if bottom_w > 0:
+            fill = QColor(bottom_color)
+            fill.setAlpha(245)
+            painter.fillRect(QRect(bar_x, baseline_y + 1, bottom_w, bottom_area_h), fill)
+
+        axis = QColor(255, 255, 255)
+        axis.setAlpha(95)
+        painter.fillRect(QRect(rect.left(), baseline_y, rect.width(), 1), axis)
+
+    def _draw_network_value_overlay(self, painter: QPainter, rect: QRect, top_text: str, bottom_text: str) -> None:
+        """Draws floating compact numeric overlays for the two network directions."""
+        if rect.width() <= 10 or rect.height() <= 8:
+            return
+
+        mid_y = rect.top() + rect.height() // 2
+        top_rect = QRect(rect.left(), rect.top(), rect.width(), max(1, mid_y - rect.top()))
+        bottom_rect = QRect(rect.left(), mid_y + 1, rect.width(), max(1, rect.bottom() - mid_y))
+        self._draw_pixel_value_badge(painter, top_rect, self._compact_network_value(top_text), True)
+        self._draw_pixel_value_badge(painter, bottom_rect, self._compact_network_value(bottom_text), True)
+
+    @staticmethod
+    def _compact_network_value(value_text: str) -> str:
+        compact = str(value_text).strip().replace(",", ".")
+        if len(compact) <= 5:
+            return compact
+        if "." in compact:
+            whole, fraction = compact.split(".", 1)
+            if len(whole) >= 4:
+                return whole[:5]
+            return f"{whole}.{fraction[:max(0, 4 - len(whole))]}"[:5]
+        return compact[:5]
 
 
 
@@ -764,42 +895,50 @@ class WidgetRenderer:
 
     def _draw_block_value_text(self, painter: QPainter, rect: QRect, current_value: float, available: bool) -> None:
         """Draws the compact numeric value inside a Stats-style graph block."""
-        if rect.width() <= 10 or rect.height() <= 8:
+        value_text = "--" if not available else f"{int(round(self._bounded_percent(current_value)))}"
+        self._draw_pixel_value_badge(painter, rect, value_text, available)
+
+    def _draw_pixel_value_badge(self, painter: QPainter, rect: QRect, value_text: str, available: bool) -> None:
+        """Draws a small floating pixel-number badge without affecting layout."""
+        if rect.width() <= 8 or rect.height() <= 4:
             return
 
+        text = str(value_text).strip() or "--"
         painter.save()
         try:
-            value_text = "--" if not available else f"{int(round(self._bounded_percent(current_value)))}"
-            scale = max(1, min(2, (rect.height() - 4) // 5))
+            scale = max(1, min(2, rect.height() // 7))
             digit_w = 3 * scale
             digit_h = 5 * scale
             gap = max(1, scale)
-            total_w = (digit_w * len(value_text)) + (gap * max(0, len(value_text) - 1))
+            total_w = (digit_w * len(text)) + (gap * max(0, len(text) - 1))
             if total_w > rect.width() - 4:
                 scale = 1
                 digit_w = 3
                 digit_h = 5
                 gap = 1
-                total_w = (digit_w * len(value_text)) + (gap * max(0, len(value_text) - 1))
+                total_w = (digit_w * len(text)) + (gap * max(0, len(text) - 1))
+
+            pad_x = 2
+            pad_y = 1 if rect.height() <= 8 else 2
 
             backing = QRect(
-                rect.left() + int((rect.width() - total_w - 4) / 2),
-                rect.top() + int((rect.height() - digit_h - 4) / 2),
-                total_w + 4,
-                digit_h + 4,
+                rect.left() + int((rect.width() - total_w - (pad_x * 2)) / 2),
+                rect.top() + int((rect.height() - digit_h - (pad_y * 2)) / 2),
+                total_w + (pad_x * 2),
+                digit_h + (pad_y * 2),
             )
 
             bg = QColor(0, 0, 0)
             bg.setAlpha(178 if available else 95)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(bg)
-            painter.drawRoundedRect(backing, 2, 2)
+            painter.drawRoundedRect(backing, 1, 1)
 
             fg = QColor(255, 255, 255)
             fg.setAlpha(255 if available else 145)
-            x = backing.left() + 2
-            y = backing.top() + 2
-            for ch in value_text:
+            x = backing.left() + pad_x
+            y = backing.top() + pad_y
+            for ch in text:
                 self._draw_pixel_glyph(painter, ch, x, y, scale, fg)
                 x += digit_w + gap
         finally:
@@ -818,6 +957,8 @@ class WidgetRenderer:
             "7": ("111", "001", "010", "010", "010"),
             "8": ("111", "101", "111", "101", "111"),
             "9": ("111", "101", "111", "001", "111"),
+            ".": ("000", "000", "000", "000", "010"),
+            ",": ("000", "000", "000", "010", "100"),
             "-": ("000", "000", "111", "000", "000"),
         }
         rows = glyphs.get(ch, glyphs["-"])

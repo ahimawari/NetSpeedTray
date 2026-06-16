@@ -174,6 +174,14 @@ class WidgetLayoutManager:
                                         max_number_width + unit_gap +
                                         max_unit_width + margin)
 
+                if self.widget.config.get('hardware_label_style', 'icons_colored') == "stats_blocks":
+                    calculated_width = (
+                        constants.renderer.STATS_BLOCK_LABEL_WIDTH +
+                        constants.renderer.STATS_BLOCK_INNER_GAP +
+                        constants.renderer.STATS_BLOCK_GRAPH_WIDTH +
+                        (margin * 2)
+                    )
+
                 # Save calculated network width for other layout consumers (e.g. mini-graph)
                 self._network_width = calculated_width
 
