@@ -1034,7 +1034,7 @@ class WidgetRenderer:
         if rect.width() <= 1 or rect.height() <= 1:
             return
 
-        gauge = rect.adjusted(0, max(1, rect.height() // 4), 0, -max(1, rect.height() // 4))
+        gauge = rect
         track = QColor(color)
         track.setAlpha(46 if available else 18)
         painter.fillRect(gauge, track)
