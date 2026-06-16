@@ -546,14 +546,6 @@ class NetworkSpeedWidget(QWidget):
         if self._pending_hover_key and self._pending_hover_anchor:
             self._show_detail_popup(self._pending_hover_key, self._pending_hover_anchor, sticky=False)
 
-    def show_all_hardware_details(self, local_pos: QPoint, global_pos: Optional[QPoint] = None) -> None:
-        """Shows the complete hardware detail popup."""
-        self.cancel_pending_detail_popup()
-        _, anchor = self._module_popup_target_at_point(local_pos, global_pos or local_pos)
-        fallback_point = global_pos or local_pos
-        fallback_rect = QRect(fallback_point, fallback_point)
-        self._show_detail_popup("overview", anchor or fallback_rect, sticky=True)
-
     def _show_detail_popup(self, module_key: str, anchor: QRect, sticky: bool, keep_position: bool = False) -> None:
         if self.detail_popup is None:
             self.detail_popup = ModuleDetailPopup(parent=None)
