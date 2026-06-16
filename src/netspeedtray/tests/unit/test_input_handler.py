@@ -64,6 +64,7 @@ class TestInputHandler(unittest.TestCase):
         self.mock_widget.update_config = MagicMock()
         self.mock_widget.open_graph_window = MagicMock()
         self.mock_widget.show_all_hardware_details = MagicMock()
+        self.mock_widget.schedule_click_detail = MagicMock()
         # Set geometry so pos() returns something
         self.mock_widget.setGeometry(100, 100, 200, 50)
         
@@ -149,6 +150,15 @@ class TestInputHandler(unittest.TestCase):
         
         # Since we didn't mock x() and y(), only move(), it returns the design values (100, 100)
         self.assertEqual(updates.get('position_x', 100), 100)
+
+    def test_mouse_release_without_drag_does_not_open_detail(self):
+        """Test plain single-click release does not open a detail popup."""
+        event = self._create_mouse_event(button=Qt.MouseButton.LeftButton)
+
+        self.handler.handle_mouse_release(event)
+
+        self.mock_widget.schedule_click_detail.assert_not_called()
+        event.accept.assert_called_once()
 
     def test_double_click_shows_hardware_details(self):
         """Test Double Click shows the hardware detail overview."""

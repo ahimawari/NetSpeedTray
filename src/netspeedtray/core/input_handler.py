@@ -85,9 +85,6 @@ class InputHandler(QObject):
                 self.widget._dragging = False
                 self._save_dragged_position()
                 self.logger.debug("Drag ended. Position saved: %s", self.widget.pos())
-            elif hasattr(self.widget, 'schedule_click_detail'):
-                self.widget.schedule_click_detail(event.position().toPoint(), event.globalPosition().toPoint())
-            
             self._drag_start_pos = None
             event.accept()
 

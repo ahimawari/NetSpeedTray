@@ -128,9 +128,6 @@ class NetworkSpeedWidget(QWidget):
         self._hover_detail_timer = QTimer(self)
         self._hover_detail_timer.setSingleShot(True)
         self._hover_detail_timer.timeout.connect(self._show_pending_hover_detail)
-        self._click_detail_timer = QTimer(self)
-        self._click_detail_timer.setSingleShot(True)
-        self._click_detail_timer.timeout.connect(self._show_pending_click_detail)
 
         self.taskbar_height: int = taskbar_height
         self._dragging: bool = False
@@ -148,8 +145,6 @@ class NetworkSpeedWidget(QWidget):
         self._detail_popup_sticky: bool = False
         self._pending_hover_key: Optional[str] = None
         self._pending_hover_anchor: Optional[QRect] = None
-        self._pending_click_key: Optional[str] = None
-        self._pending_click_anchor: Optional[QRect] = None
         
         # Hooks for system events
         self.system_event_handler: SystemEventHandler
@@ -523,35 +518,11 @@ class NetworkSpeedWidget(QWidget):
         self._pending_hover_anchor = anchor
         self._hover_detail_timer.start(260)
 
-    def schedule_click_detail(self, local_pos: QPoint, global_pos: QPoint) -> None:
-        """Schedules a single-click detail popup, delayed so double-click can cancel it."""
-        module_key, anchor = self._module_popup_target_at_point(local_pos, global_pos)
-        if not module_key or anchor is None:
-            self.hide_detail_popup(force=True)
-            return
-
-        if (
-            self._detail_popup_sticky
-            and self._detail_popup_key == module_key
-            and self.detail_popup
-            and self.detail_popup.isVisible()
-        ):
-            self.hide_detail_popup(force=True)
-            return
-
-        self._pending_click_key = module_key
-        self._pending_click_anchor = anchor
-        delay_ms = max(220, min(520, QApplication.doubleClickInterval() + 30))
-        self._click_detail_timer.start(delay_ms)
-
     def cancel_pending_detail_popup(self) -> None:
-        """Cancels pending hover/click detail popups."""
+        """Cancels pending hover detail popups."""
         self._hover_detail_timer.stop()
-        self._click_detail_timer.stop()
         self._pending_hover_key = None
         self._pending_hover_anchor = None
-        self._pending_click_key = None
-        self._pending_click_anchor = None
 
     def hide_hover_detail(self) -> None:
         """Hides non-sticky hover details."""
@@ -574,10 +545,6 @@ class NetworkSpeedWidget(QWidget):
     def _show_pending_hover_detail(self) -> None:
         if self._pending_hover_key and self._pending_hover_anchor:
             self._show_detail_popup(self._pending_hover_key, self._pending_hover_anchor, sticky=False)
-
-    def _show_pending_click_detail(self) -> None:
-        if self._pending_click_key and self._pending_click_anchor:
-            self._show_detail_popup(self._pending_click_key, self._pending_click_anchor, sticky=True)
 
     def show_all_hardware_details(self, local_pos: QPoint, global_pos: Optional[QPoint] = None) -> None:
         """Shows the complete hardware detail popup."""
@@ -1718,7 +1685,6 @@ class NetworkSpeedWidget(QWidget):
             
             if self._state_watcher_timer.isActive(): self._state_watcher_timer.stop()
             if self._hover_detail_timer.isActive(): self._hover_detail_timer.stop()
-            if self._click_detail_timer.isActive(): self._click_detail_timer.stop()
             if self.detail_popup:
                 self.detail_popup.close()
                 self.detail_popup = None
