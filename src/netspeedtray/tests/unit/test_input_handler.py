@@ -160,14 +160,14 @@ class TestInputHandler(unittest.TestCase):
         self.mock_widget.schedule_click_detail.assert_not_called()
         event.accept.assert_called_once()
 
-    def test_double_click_does_not_open_detail(self):
-        """Test Double Click does not open a detail popup."""
+    def test_double_click_opens_graph_not_detail(self):
+        """Test Double Click opens the graph window, not a detail popup."""
         event = self._create_mouse_event(button=Qt.MouseButton.LeftButton)
         
         self.handler.handle_double_click(event)
         
         self.mock_widget.show_all_hardware_details.assert_not_called()
-        self.mock_widget.open_graph_window.assert_not_called()
+        self.mock_widget.open_graph_window.assert_called_once()
         event.accept.assert_called_once()
 
 if __name__ == '__main__':

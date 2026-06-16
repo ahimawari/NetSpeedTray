@@ -89,9 +89,11 @@ class InputHandler(QObject):
             event.accept()
 
     def handle_double_click(self, event: QMouseEvent) -> None:
-        """Handles double-click."""
+        """Handles double-click (Open Graph)."""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.logger.debug("Double-click detected. No action configured.")
+            self.logger.debug("Double-click detected. Opening Graph Window.")
+            if hasattr(self.widget, 'open_graph_window'):
+                self.widget.open_graph_window()
             event.accept()
 
     def handle_leave(self) -> None:
