@@ -254,7 +254,7 @@ class WidgetRenderer:
                 short_labels=config.short_unit_labels, split_unit=True
             )
 
-            if getattr(config, "hardware_label_style", "") == "stats_blocks":
+            if getattr(config, "hardware_label_style", "") in ("pixel_hud_blocks", "stats_blocks"):
                 self._draw_network_stats_block(
                     painter,
                     upload,
@@ -374,7 +374,7 @@ class WidgetRenderer:
     def _draw_network_stats_block(self, painter: QPainter, upload: float, download: float,
                                   up_val: str, down_val: str, width: int, height: int,
                                   config: RenderConfig, x_offset: int) -> None:
-        """Draws a compact top/bottom bidirectional upload/download bar block."""
+        """Draws a compact pixel HUD network block."""
         painter.save()
         try:
             label_w = constants.renderer.STATS_BLOCK_LABEL_WIDTH
@@ -401,17 +401,7 @@ class WidgetRenderer:
             accent = QColor(constants.graph.UPLOAD_LINE_COLOR).lighter(125)
             self._draw_vertical_block_label(painter, "NET", label_rect, accent, self._stats_label_color(True), True)
 
-            frame_fill = QColor(3, 6, 10)
-            frame_fill.setAlpha(236)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(frame_fill)
-            painter.drawRoundedRect(graph_rect, 2, 2)
-
-            border = QColor(170, 220, 255)
-            border.setAlpha(210)
-            painter.setPen(QPen(border, 1))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(graph_rect, 2, 2)
+            self._draw_pixel_hud_frame(painter, graph_rect, accent, True)
 
             top_bytes, bottom_bytes = (download, upload) if config.swap_upload_download else (upload, download)
             top_text, bottom_text = (down_val, up_val) if config.swap_upload_download else (up_val, down_val)
@@ -488,6 +478,45 @@ class WidgetRenderer:
         bottom_rect = QRect(rect.left(), mid_y + 1, rect.width(), max(1, rect.bottom() - mid_y))
         self._draw_network_text_badge(painter, top_rect, self._compact_network_value(top_text))
         self._draw_network_text_badge(painter, bottom_rect, self._compact_network_value(bottom_text))
+
+    def _draw_pixel_hud_frame(self, painter: QPainter, rect: QRect, accent: QColor, available: bool) -> None:
+        """Draws the cyber-pixel frame shared by compact taskbar HUD blocks."""
+        if rect.width() <= 2 or rect.height() <= 2:
+            return
+
+        fill = QColor(2, 7, 13)
+        fill.setAlpha(230 if available else 166)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(fill)
+        painter.drawRect(rect)
+
+        grid = QColor(255, 255, 255)
+        grid.setAlpha(18 if available else 8)
+        inner = rect.adjusted(2, 2, -2, -2)
+        for x in range(inner.left() + 6, inner.right(), 6):
+            painter.fillRect(QRect(x, inner.top(), 1, max(1, inner.height())), grid)
+        for y in range(inner.top() + 5, inner.bottom(), 5):
+            painter.fillRect(QRect(inner.left(), y, max(1, inner.width()), 1), grid)
+
+        scan = QColor(accent)
+        scan.setAlpha(48 if available else 22)
+        painter.fillRect(QRect(rect.left() + 2, rect.top() + 2, max(1, rect.width() - 4), 1), scan)
+
+        edge = QColor(accent)
+        edge.setAlpha(245 if available else 115)
+        painter.setPen(QPen(edge, 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(rect.adjusted(0, 0, -1, -1))
+
+        corner = QColor(accent)
+        corner.setAlpha(255 if available else 120)
+        size = 2
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(corner)
+        painter.drawRect(QRect(rect.left(), rect.top(), size, size))
+        painter.drawRect(QRect(rect.right() - size + 1, rect.top(), size, size))
+        painter.drawRect(QRect(rect.left(), rect.bottom() - size + 1, size, size))
+        painter.drawRect(QRect(rect.right() - size + 1, rect.bottom() - size + 1, size, size))
 
     def _draw_network_direction_icon(self, painter: QPainter, rect: QRect, color: QColor, is_upload: bool) -> None:
         """Draws a tiny direction arrow icon for the network lane."""
@@ -568,7 +597,7 @@ class WidgetRenderer:
             border.setAlpha(58)
             painter.setPen(QPen(border, 1))
             painter.setBrush(bg)
-            painter.drawRoundedRect(badge, 1, 1)
+            painter.drawRect(badge.adjusted(0, 0, -1, -1))
 
             fg = QColor(255, 255, 255)
             fg.setAlpha(236)
@@ -613,7 +642,7 @@ class WidgetRenderer:
             gpu_idx = order.index("gpu") if "gpu" in order else 999
 
             style = getattr(config, 'hardware_label_style', 'icons_colored')
-            if style == "stats_blocks":
+            if style in ("pixel_hud_blocks", "stats_blocks"):
                 cpu_color = constants.renderer.STATS_BLOCK_CPU_COLOR
                 gpu_color = constants.renderer.STATS_BLOCK_GPU_COLOR
             else:
@@ -631,7 +660,7 @@ class WidgetRenderer:
 
             if not enabled_stats: return
 
-            if style == "stats_blocks":
+            if style in ("pixel_hud_blocks", "stats_blocks"):
                 self._draw_stats_blocks(
                     painter,
                     enabled_stats,
@@ -713,7 +742,7 @@ class WidgetRenderer:
     def _draw_stats_blocks(self, painter: QPainter, enabled_stats: List[Tuple[str, float, Optional[float], Any, str, Optional[float]]],
                            width: int, height: int, config: RenderConfig, x_offset: int,
                            histories: Dict[str, List[Any]]) -> None:
-        """Draws compact Stats-style hardware blocks with vertical labels and tiny charts."""
+        """Draws compact pixel HUD hardware blocks with vertical labels and tiny charts."""
         blocks = self._build_stats_blocks(enabled_stats, config, histories)
         if not blocks:
             return
@@ -814,17 +843,7 @@ class WidgetRenderer:
         accent = self._stats_block_accent(color, available)
         self._draw_vertical_block_label(painter, label, label_rect, accent, self._stats_label_color(available), available)
 
-        frame_fill = QColor(3, 6, 10)
-        frame_fill.setAlpha(236 if available else 172)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(frame_fill)
-        painter.drawRoundedRect(graph_rect, 2, 2)
-
-        border = QColor(accent)
-        border.setAlpha(255 if available else 120)
-        painter.setPen(QPen(border, 1))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(graph_rect, 2, 2)
+        self._draw_pixel_hud_frame(painter, graph_rect, accent, available)
 
         pct = self._bounded_percent(value)
         inner = graph_rect.adjusted(2, 2, -2, -2)
@@ -1001,7 +1020,7 @@ class WidgetRenderer:
             painter.fillRect(cell, cell_color)
 
     def _draw_block_value_text(self, painter: QPainter, rect: QRect, current_value: float, available: bool) -> None:
-        """Draws the compact numeric value inside a Stats-style graph block."""
+        """Draws the compact numeric value inside a pixel HUD graph block."""
         value_text = "--" if not available else f"{int(round(self._bounded_percent(current_value)))}"
         self._draw_pixel_value_badge(painter, rect, value_text, available)
 
@@ -1041,7 +1060,7 @@ class WidgetRenderer:
             border.setAlpha(58 if available else 32)
             painter.setPen(QPen(border, 1))
             painter.setBrush(bg)
-            painter.drawRoundedRect(backing, 1, 1)
+            painter.drawRect(backing.adjusted(0, 0, -1, -1))
 
             fg = QColor(255, 255, 255)
             fg.setAlpha(236 if available else 150)

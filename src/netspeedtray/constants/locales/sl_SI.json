@@ -86,7 +86,7 @@
     "HARDWARE_LABEL_STYLE_COLORED_ICONS": "Barvne ikone",
     "HARDWARE_LABEL_STYLE_MONOCHROME_ICONS": "Enobarvne ikone (bela)",
     "HARDWARE_LABEL_STYLE_TEXT_LABELS": "Besedilne oznake (CPU, GPU)",
-    "HARDWARE_LABEL_STYLE_STATS_BLOCKS": "Kompaktni bloki v slogu Stats",
+    "HARDWARE_LABEL_STYLE_PIXEL_HUD_BLOCKS": "Pikselski HUD bloki",
     "WIDGET_DISPLAY_MODE_LABEL": "Način prikaza gradnika",
     "WIDGET_SEGMENT_GAP_LABEL": "Segment Gap",
     "DISPLAY_MODE_NETWORK": "Samo omrežje",

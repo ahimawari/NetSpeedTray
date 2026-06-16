@@ -86,7 +86,7 @@
     "HARDWARE_LABEL_STYLE_COLORED_ICONS": "Icones colorees",
     "HARDWARE_LABEL_STYLE_MONOCHROME_ICONS": "Icones monochromes (blanc)",
     "HARDWARE_LABEL_STYLE_TEXT_LABELS": "Etiquettes texte (CPU, GPU)",
-    "HARDWARE_LABEL_STYLE_STATS_BLOCKS": "Blocs compacts style Stats",
+    "HARDWARE_LABEL_STYLE_PIXEL_HUD_BLOCKS": "Blocs HUD pixel",
     "WIDGET_DISPLAY_MODE_LABEL": "Mode d'affichage du widget",
     "WIDGET_SEGMENT_GAP_LABEL": "Segment Gap",
     "DISPLAY_MODE_NETWORK": "Réseau uniquement",

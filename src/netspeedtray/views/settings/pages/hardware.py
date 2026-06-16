@@ -76,7 +76,7 @@ class HardwarePage(QWidget):
         self.label_style.addItem(self.i18n.HARDWARE_LABEL_STYLE_COLORED_ICONS, userData="icons_colored")
         self.label_style.addItem(self.i18n.HARDWARE_LABEL_STYLE_MONOCHROME_ICONS, userData="icons_monochrome")
         self.label_style.addItem(self.i18n.HARDWARE_LABEL_STYLE_TEXT_LABELS, userData="text")
-        self.label_style.addItem(self.i18n.HARDWARE_LABEL_STYLE_STATS_BLOCKS, userData="stats_blocks")
+        self.label_style.addItem(self.i18n.HARDWARE_LABEL_STYLE_PIXEL_HUD_BLOCKS, userData="pixel_hud_blocks")
         self.label_style.currentIndexChanged.connect(self.on_change)
 
         hw_layout.addWidget(style_label, 7, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -161,6 +161,8 @@ class HardwarePage(QWidget):
 
         style_val = config.get("hardware_label_style", "icons_colored")
         style_idx = self.label_style.findData(style_val)
+        if style_idx < 0 and style_val == "stats_blocks":
+            style_idx = self.label_style.findData("pixel_hud_blocks")
         if style_idx >= 0:
             self.label_style.setCurrentIndex(style_idx)
 

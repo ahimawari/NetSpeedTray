@@ -595,7 +595,7 @@ class NetworkSpeedWidget(QWidget):
             if render_config.graph_enabled:
                 self._draw_widget_graph(painter, render_config, display_mode, layout_mode)
 
-            # 4. Foreground Content (Text/Stats)
+            # 4. Foreground Content (Text/HUD)
             painter.setFont(self.current_font)
             self._draw_widget_foreground(painter, render_config, display_mode, layout_mode)
             
@@ -609,7 +609,7 @@ class NetworkSpeedWidget(QWidget):
         """Draws the mini-graph background layer based on current mode."""
         if mode == "side_by_side":
             return  # Handled inside the segment renderer loop for accurate width scoping
-        if mode == "network_only" and getattr(config, 'hardware_label_style', '') == "stats_blocks":
+        if mode == "network_only" and getattr(config, 'hardware_label_style', '') in ("pixel_hud_blocks", "stats_blocks"):
             return
         elif mode == "cpu_only":
             history = list(self.widget_state.cpu_history)
@@ -622,7 +622,7 @@ class NetworkSpeedWidget(QWidget):
             self.renderer.draw_mini_graph(painter, self.width(), self.height(), config, history, layout)
 
     def _draw_widget_foreground(self, painter: QPainter, config: RenderConfig, mode: str, layout: str) -> None:
-        """Draws the text and stats foreground layer based on current mode."""
+        """Draws the text and HUD foreground layer based on current mode."""
         if mode == "side_by_side":
             self._draw_side_by_side_layout(painter, config, layout)
         elif mode == "network_only":
@@ -668,7 +668,7 @@ class NetworkSpeedWidget(QWidget):
         
         for key in active_keys:
             if key == "network":
-                if config.graph_enabled and getattr(config, 'hardware_label_style', '') != "stats_blocks":
+                if config.graph_enabled and getattr(config, 'hardware_label_style', '') not in ("pixel_hud_blocks", "stats_blocks"):
                     painter.save()
                     # Offset the canvas to draw graph only behind the network segment
                     painter.translate(current_x, 0)

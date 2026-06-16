@@ -86,7 +86,7 @@
     "HARDWARE_LABEL_STYLE_COLORED_ICONS": "Gekleurde pictogrammen",
     "HARDWARE_LABEL_STYLE_MONOCHROME_ICONS": "Monochrome pictogrammen (wit)",
     "HARDWARE_LABEL_STYLE_TEXT_LABELS": "Tekstlabels (CPU, GPU)",
-    "HARDWARE_LABEL_STYLE_STATS_BLOCKS": "Compacte Stats-blokken",
+    "HARDWARE_LABEL_STYLE_PIXEL_HUD_BLOCKS": "Pixel-HUD-blokken",
     "WIDGET_DISPLAY_MODE_LABEL": "Widget weergavemodus",
     "WIDGET_SEGMENT_GAP_LABEL": "Segment Gap",
     "DISPLAY_MODE_NETWORK": "Alleen netwerk",
