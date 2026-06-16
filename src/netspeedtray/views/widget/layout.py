@@ -178,7 +178,7 @@ class WidgetLayoutManager:
                     calculated_width = (
                         constants.renderer.STATS_BLOCK_LABEL_WIDTH +
                         constants.renderer.STATS_BLOCK_INNER_GAP +
-                        constants.renderer.STATS_BLOCK_GRAPH_WIDTH +
+                        constants.renderer.STATS_BLOCK_NETWORK_GRAPH_WIDTH +
                         (margin * 2)
                     )
 

@@ -378,7 +378,7 @@ class WidgetRenderer:
         painter.save()
         try:
             label_w = constants.renderer.STATS_BLOCK_LABEL_WIDTH
-            graph_w = constants.renderer.STATS_BLOCK_GRAPH_WIDTH
+            graph_w = constants.renderer.STATS_BLOCK_NETWORK_GRAPH_WIDTH
             inner_gap = constants.renderer.STATS_BLOCK_INNER_GAP
             block_w = label_w + inner_gap + graph_w
             margin = constants.renderer.TEXT_MARGIN
@@ -440,8 +440,9 @@ class WidgetRenderer:
         top_area_h = max(1, baseline_y - rect.top() - 1)
         bottom_area_h = max(1, rect.bottom() - baseline_y - 1)
         scale = max(top_value, bottom_value, 1.0)
-        bar_w = max(4, rect.width() - 2)
-        bar_x = rect.left() + 1
+        icon_slot_w = 8
+        bar_w = max(4, rect.width() - icon_slot_w - 2)
+        bar_x = rect.left() + icon_slot_w + 1
 
         top_bg = QColor(top_color)
         top_bg.setAlpha(40)
@@ -464,6 +465,18 @@ class WidgetRenderer:
         axis = QColor(255, 255, 255)
         axis.setAlpha(95)
         painter.fillRect(QRect(rect.left(), baseline_y, rect.width(), 1), axis)
+        self._draw_network_direction_icon(
+            painter,
+            QRect(rect.left(), rect.top(), icon_slot_w, top_area_h),
+            top_color,
+            True,
+        )
+        self._draw_network_direction_icon(
+            painter,
+            QRect(rect.left(), baseline_y + 1, icon_slot_w, bottom_area_h),
+            bottom_color,
+            False,
+        )
 
     def _draw_network_value_overlay(self, painter: QPainter, rect: QRect, top_text: str, bottom_text: str) -> None:
         """Draws floating compact numeric overlays for the two network directions."""
@@ -473,8 +486,96 @@ class WidgetRenderer:
         mid_y = rect.top() + rect.height() // 2
         top_rect = QRect(rect.left(), rect.top(), rect.width(), max(1, mid_y - rect.top()))
         bottom_rect = QRect(rect.left(), mid_y + 1, rect.width(), max(1, rect.bottom() - mid_y))
-        self._draw_pixel_value_badge(painter, top_rect, self._compact_network_value(top_text), True)
-        self._draw_pixel_value_badge(painter, bottom_rect, self._compact_network_value(bottom_text), True)
+        self._draw_network_text_badge(painter, top_rect, self._compact_network_value(top_text))
+        self._draw_network_text_badge(painter, bottom_rect, self._compact_network_value(bottom_text))
+
+    def _draw_network_direction_icon(self, painter: QPainter, rect: QRect, color: QColor, is_upload: bool) -> None:
+        """Draws a tiny direction arrow icon for the network lane."""
+        if rect.width() <= 3 or rect.height() <= 3:
+            return
+
+        painter.save()
+        try:
+            icon_color = QColor(color)
+            icon_color.setAlpha(255)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(icon_color)
+
+            cx = rect.left() + rect.width() / 2.0
+            top = rect.top() + 1.0
+            bottom = rect.bottom() - 1.0
+            shaft_half = 0.8
+            head_half = 2.5
+            head_h = max(2.0, min(4.0, rect.height() - 2.0))
+
+            path = QPainterPath()
+            if is_upload:
+                path.moveTo(cx, top)
+                path.lineTo(cx - head_half, top + head_h)
+                path.lineTo(cx - shaft_half, top + head_h)
+                path.lineTo(cx - shaft_half, bottom)
+                path.lineTo(cx + shaft_half, bottom)
+                path.lineTo(cx + shaft_half, top + head_h)
+                path.lineTo(cx + head_half, top + head_h)
+            else:
+                path.moveTo(cx, bottom)
+                path.lineTo(cx - head_half, bottom - head_h)
+                path.lineTo(cx - shaft_half, bottom - head_h)
+                path.lineTo(cx - shaft_half, top)
+                path.lineTo(cx + shaft_half, top)
+                path.lineTo(cx + shaft_half, bottom - head_h)
+                path.lineTo(cx + head_half, bottom - head_h)
+            path.closeSubpath()
+            painter.drawPath(path)
+        finally:
+            painter.restore()
+
+    def _draw_network_text_badge(self, painter: QPainter, rect: QRect, value_text: str) -> None:
+        """Draws a larger floating pixel-number badge in a network graph lane."""
+        if rect.width() <= 16 or rect.height() <= 5:
+            return
+
+        text = str(value_text).strip() or "--"
+        painter.save()
+        try:
+            text_rect = rect.adjusted(9, 0, -1, 0)
+            scale = 2 if rect.height() >= 10 else 1
+            digit_w = 3 * scale
+            digit_h = 5 * scale
+            gap = max(1, scale)
+            total_w = (digit_w * len(text)) + (gap * max(0, len(text) - 1))
+            if total_w > text_rect.width() - 4:
+                scale = 1
+                digit_w = 3
+                digit_h = 5
+                gap = 1
+                total_w = (digit_w * len(text)) + (gap * max(0, len(text) - 1))
+
+            pad_x = 2
+            pad_y = max(0, min(1, int((rect.height() - digit_h) / 2)))
+            badge_w = min(text_rect.width(), total_w + (pad_x * 2))
+            badge_h = min(rect.height(), digit_h + (pad_y * 2))
+            badge = QRect(
+                text_rect.left() + max(0, int((text_rect.width() - badge_w) / 2)),
+                rect.top() + max(0, int((rect.height() - badge_h) / 2)),
+                badge_w,
+                badge_h,
+            )
+
+            bg = QColor(0, 0, 0)
+            bg.setAlpha(190)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(bg)
+            painter.drawRoundedRect(badge, 1, 1)
+
+            fg = QColor(255, 255, 255)
+            x = badge.left() + int((badge.width() - total_w) / 2)
+            y = badge.top() + int((badge.height() - digit_h) / 2)
+            for ch in text:
+                self._draw_pixel_glyph(painter, ch, x, y, scale, fg)
+                x += digit_w + gap
+        finally:
+            painter.restore()
 
     @staticmethod
     def _compact_network_value(value_text: str) -> str:
@@ -485,7 +586,7 @@ class WidgetRenderer:
             whole, fraction = compact.split(".", 1)
             if len(whole) >= 4:
                 return whole[:5]
-            return f"{whole}.{fraction[:max(0, 4 - len(whole))]}"[:5]
+            return f"{whole}.{fraction[:max(0, 4 - len(whole))]}"[:5].rstrip(".")
         return compact[:5]
 
 
