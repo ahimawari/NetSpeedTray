@@ -195,5 +195,16 @@ class TestInputHandler(unittest.TestCase):
         self.mock_widget.open_graph_window.assert_called_once()
         event.accept.assert_called_once()
 
+    def test_graph_open_is_debounced(self):
+        """Test duplicate double-click paths only open the graph once."""
+        with patch(
+            "netspeedtray.core.input_handler.time.monotonic",
+            side_effect=[10.0, 10.1],
+        ):
+            self.handler.open_graph_window_once()
+            self.handler.open_graph_window_once()
+
+        self.mock_widget.open_graph_window.assert_called_once()
+
 if __name__ == '__main__':
     unittest.main()

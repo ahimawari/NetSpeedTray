@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import sys
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
@@ -128,10 +129,19 @@ class NetworkSpeedWidget(QWidget):
         self._hover_detail_timer = QTimer(self)
         self._hover_detail_timer.setSingleShot(True)
         self._hover_detail_timer.timeout.connect(self._show_pending_hover_detail)
+        self._double_click_poll_timer = QTimer(self)
+        self._double_click_poll_timer.setInterval(40)
+        self._double_click_poll_timer.timeout.connect(self._poll_native_click_state)
 
         self.taskbar_height: int = taskbar_height
         self._dragging: bool = False
         self._drag_offset: QPoint = QPoint()
+        self._poll_left_down: bool = False
+        self._poll_press_inside: bool = False
+        self._poll_press_pos: Optional[QPoint] = None
+        self._poll_press_dragging: bool = False
+        self._poll_last_click_time_ms: float = 0.0
+        self._poll_last_click_pos: Optional[QPoint] = None
         self.startup_manager: StartupManager
         self.is_paused: bool = False
         self._last_immediate_hide_time: float = 0.0 # For the race condition fix
@@ -203,6 +213,9 @@ class NetworkSpeedWidget(QWidget):
         if self.config.get("widget_display_mode") == "cycle":
             self._cycle_timer.start(constants.renderer.renderer.CYCLE_INTERVAL_MS)
             self.logger.debug("Cycle timer started.")
+
+        self._double_click_poll_timer.start()
+        self.logger.debug("Native click polling timer started.")
 
 
     def _init_core_components(self) -> None:
@@ -1178,6 +1191,71 @@ class NetworkSpeedWidget(QWidget):
         if self.input_handler:
             self.input_handler.handle_double_click(event)
 
+    def _poll_native_click_state(self) -> None:
+        """Detect double-clicks even when Qt misses taskbar-window mouse events."""
+        try:
+            if sys.platform != "win32" or not self.isVisible():
+                self._reset_polled_click_state()
+                return
+
+            left_down = bool(win32api.GetAsyncKeyState(win32con.VK_LBUTTON) & 0x8000)
+            cursor_x, cursor_y = win32gui.GetCursorPos()
+            cursor_pos = QPoint(cursor_x, cursor_y)
+            inside_widget = self._is_screen_point_inside_widget(cursor_x, cursor_y)
+
+            if left_down and not self._poll_left_down:
+                self._poll_press_inside = inside_widget
+                self._poll_press_pos = cursor_pos
+                self._poll_press_dragging = False
+            elif left_down and self._poll_left_down and self._poll_press_pos is not None:
+                if (cursor_pos - self._poll_press_pos).manhattanLength() >= QApplication.startDragDistance():
+                    self._poll_press_dragging = True
+            elif not left_down and self._poll_left_down:
+                if self._poll_press_inside and inside_widget and not self._poll_press_dragging:
+                    self._handle_polled_click_release(cursor_pos)
+                self._poll_press_inside = False
+                self._poll_press_pos = None
+                self._poll_press_dragging = False
+
+            self._poll_left_down = left_down
+        except Exception as e:
+            self.logger.error("Error polling native click state: %s", e, exc_info=True)
+            self._reset_polled_click_state()
+
+    def _is_screen_point_inside_widget(self, x: int, y: int) -> bool:
+        try:
+            left, top, right, bottom = win32gui.GetWindowRect(int(self.winId()))
+            return left <= x < right and top <= y < bottom
+        except Exception:
+            rect = self.frameGeometry()
+            return rect.contains(QPoint(x, y))
+
+    def _handle_polled_click_release(self, pos: QPoint) -> None:
+        now_ms = time.monotonic() * 1000.0
+        is_double_click = (
+            self._poll_last_click_pos is not None
+            and now_ms - self._poll_last_click_time_ms <= QApplication.doubleClickInterval()
+            and (pos - self._poll_last_click_pos).manhattanLength() <= QApplication.startDragDistance()
+        )
+
+        if is_double_click:
+            self._poll_last_click_time_ms = 0.0
+            self._poll_last_click_pos = None
+            if self.input_handler and hasattr(self.input_handler, "open_graph_window_once"):
+                self.input_handler.open_graph_window_once()
+            else:
+                self.open_graph_window()
+            return
+
+        self._poll_last_click_time_ms = now_ms
+        self._poll_last_click_pos = QPoint(pos)
+
+    def _reset_polled_click_state(self) -> None:
+        self._poll_left_down = False
+        self._poll_press_inside = False
+        self._poll_press_pos = None
+        self._poll_press_dragging = False
+
 
     def leaveEvent(self, event: QEvent) -> None:
         """Hide transient hover detail when the pointer leaves the widget."""
@@ -1366,7 +1444,7 @@ class NetworkSpeedWidget(QWidget):
             # requests the graph, speeding up initial application startup.
             from netspeedtray.views.graph import GraphWindow
 
-            if self.graph_window is None or not self.graph_window.isVisible():
+            if self.graph_window is None:
                 self.logger.debug("Creating new GraphWindow instance.")
                 
                 self.graph_window = GraphWindow(
@@ -1389,8 +1467,9 @@ class NetworkSpeedWidget(QWidget):
                 self.graph_window.show()
 
             else:
-                self.logger.debug("Graph window already exists. Activating.")
+                self.logger.debug("Graph window already exists. Showing and activating.")
                 self.graph_window.show()
+                self.graph_window.showNormal()
                 self.graph_window.raise_()
                 self.graph_window.activateWindow()
         except Exception as e:

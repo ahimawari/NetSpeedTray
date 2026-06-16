@@ -100,7 +100,7 @@ class InputHandler(QObject):
         """Handles double-click (Open Graph)."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.logger.debug("Double-click detected. Opening Graph Window.")
-            self._open_graph_window_once()
+            self.open_graph_window_once()
             event.accept()
 
     def _handle_click_release(self, global_pos: QPoint) -> None:
@@ -119,13 +119,13 @@ class InputHandler(QObject):
             self.logger.debug("Double-click release detected. Opening Graph Window.")
             self._last_click_time_ms = 0.0
             self._last_click_pos = None
-            self._open_graph_window_once()
+            self.open_graph_window_once()
             return
 
         self._last_click_time_ms = now_ms
         self._last_click_pos = QPoint(global_pos)
 
-    def _open_graph_window_once(self) -> None:
+    def open_graph_window_once(self) -> None:
         """Debounce graph opening when Qt and manual double-click paths both fire."""
         now_ms = time.monotonic() * 1000.0
         if now_ms - self._last_graph_open_time_ms < 500.0:
