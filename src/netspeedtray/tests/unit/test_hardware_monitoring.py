@@ -2,6 +2,9 @@
 Unit tests for the hardware monitoring logic in StatsMonitorThread.
 """
 
+import json
+import time
+
 import pytest
 from unittest.mock import MagicMock, patch
 from netspeedtray.core.monitor_thread import StatsMonitorThread, GpuPollResult
@@ -9,9 +12,45 @@ from netspeedtray.core.monitor_thread import StatsMonitorThread, GpuPollResult
 class TestHardwareMonitoring:
 
     @pytest.fixture
-    def monitor_thread(self, q_app):
+    def monitor_thread(self, q_app, tmp_path):
         """Creates a thread instance for testing."""
-        return StatsMonitorThread(interval=0.1)
+        thread = StatsMonitorThread(interval=0.1)
+        thread._lhm_bridge_path = str(tmp_path / "missing-lhm-readings.json")
+        return thread
+
+    def write_lhm_bridge(self, tmp_path, **values):
+        path = tmp_path / "lhm-readings.json"
+        payload = {"timestamp": time.time(), **values}
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return str(path)
+
+    def test_read_lhm_bridge_valid(self, monitor_thread, tmp_path):
+        """Valid elevated LHM bridge readings should be parsed and range-checked."""
+        monitor_thread._lhm_bridge_path = self.write_lhm_bridge(
+            tmp_path,
+            cpu_temp=71.2,
+            gpu_temp=52.0,
+            cpu_power=35.5,
+            gpu_power=12.8,
+            ignored="x",
+        )
+
+        readings = monitor_thread._read_lhm_bridge()
+
+        assert readings == {
+            "cpu_temp": 71.2,
+            "gpu_temp": 52.0,
+            "cpu_power": 35.5,
+            "gpu_power": 12.8,
+        }
+
+    def test_read_lhm_bridge_rejects_stale_data(self, monitor_thread, tmp_path):
+        """Stale bridge files should not be used."""
+        path = tmp_path / "lhm-readings.json"
+        path.write_text(json.dumps({"timestamp": time.time() - 60, "cpu_temp": 72.0}), encoding="utf-8")
+        monitor_thread._lhm_bridge_path = str(path)
+
+        assert monitor_thread._read_lhm_bridge() == {}
 
     # ------------------------------------------------------------------
     # GPU hybrid polling
@@ -74,6 +113,30 @@ class TestHardwareMonitoring:
 
             assert result.temp == 68.0            # From LHM, not nvidia-smi
             mock_sub.assert_not_called()   # nvidia-smi not reached when LHM provides temp
+
+    @patch('win32pdh.GetFormattedCounterValue')
+    @patch('win32pdh.CollectQueryData')
+    def test_poll_gpu_hybrid_lhm_bridge(self, mock_collect, mock_get_val, monitor_thread, tmp_path):
+        """Elevated LHM bridge GPU readings should be preferred over nvidia-smi."""
+        monitor_thread._gpu_query = 123
+        monitor_thread._gpu_util_counters = [1]
+        monitor_thread._gpu_vram_counters = []
+        monitor_thread._nvidia_smi_path = "nvidia-smi"
+        monitor_thread._wmi_ohm = False
+        monitor_thread._lhm_bridge_path = self.write_lhm_bridge(
+            tmp_path,
+            gpu_temp=64.0,
+            gpu_power=22.5,
+        )
+
+        mock_get_val.return_value = (None, 55.0)
+
+        with patch('subprocess.check_output') as mock_sub:
+            result = monitor_thread._poll_gpu_hybrid(include_temp=True, include_power=True)
+
+            assert result.temp == 64.0
+            assert result.power == 22.5
+            mock_sub.assert_not_called()
 
     @patch('win32pdh.GetFormattedCounterValue')
     @patch('win32pdh.CollectQueryData')
@@ -260,6 +323,18 @@ class TestHardwareMonitoring:
             temp = monitor_thread._poll_cpu_temperature()
             assert pytest.approx(temp, 0.1) == 37.05
             assert monitor_thread._wmi is not None
+
+    def test_poll_cpu_temperature_lhm_bridge(self, monitor_thread, tmp_path):
+        """Elevated LHM bridge CPU temp should be used before WMI fallbacks."""
+        monitor_thread._thermal_query = -1
+        monitor_thread._thermal_counters = []
+        monitor_thread._thermal_hp_counters = []
+        monitor_thread._wmi_ohm = None
+        monitor_thread._lhm_bridge_path = self.write_lhm_bridge(tmp_path, cpu_temp=70.5)
+
+        with patch.object(monitor_thread, '_init_ohm_wmi') as mock_init_ohm:
+            assert monitor_thread._poll_cpu_temperature() == 70.5
+            mock_init_ohm.assert_not_called()
 
     def test_poll_cpu_temperature_wmi_reconnection(self, monitor_thread):
         """Test that WMI client is reset on critical RPC errors."""

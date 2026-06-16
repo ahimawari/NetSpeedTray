@@ -10,7 +10,9 @@ Offloading this I/O from the main UI thread ensures consistent 60+ FPS widget mo
 and prevents micro-stutters during system stack latency.
 """
 
+import json
 import logging
+import os
 import time
 from typing import Dict, Any, Optional, List, NamedTuple, Tuple
 
@@ -80,6 +82,15 @@ class StatsMonitorThread(QThread):
         self._lhm_notice_emitted: bool = False  # One-time notification flag
         self._lhm_check_polls: int = 0  # Count polls before emitting notice
         self._nvidia_smi_path: Optional[str] = self._get_cached_path("nvidia-smi")
+        self._lhm_bridge_path: str = os.environ.get(
+            "NETSPEEDTRAY_LHM_BRIDGE_PATH",
+            os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "NetSpeedTray", "lhm-readings.json"),
+        )
+        self._lhm_bridge_cache: Optional[Dict[str, float]] = None
+        self._lhm_bridge_cache_time: float = 0.0
+        self._lhm_bridge_logged_available: bool = False
+        self._lhm_bridge_logged_unavailable: bool = False
+        self._lhm_bridge_logged_stale: bool = False
 
         # PDH Queries for GPU
         self._gpu_query: Optional[int] = None
@@ -215,6 +226,18 @@ class StatsMonitorThread(QThread):
         need_smi_power = include_power
 
         if include_temp or include_power:
+            bridge = self._read_lhm_bridge()
+            if include_temp:
+                bridge_temp = bridge.get("gpu_temp")
+                if bridge_temp is not None:
+                    temp_c = bridge_temp
+                    need_smi_temp = False
+            if include_power:
+                bridge_power = bridge.get("gpu_power")
+                if bridge_power is not None:
+                    power_w = bridge_power
+                    need_smi_power = False
+
             self._init_ohm_wmi()
             if self._wmi_ohm:
                 # 3a. LHM/OHM GPU temperature
@@ -447,7 +470,12 @@ class StatsMonitorThread(QThread):
                 except Exception as e:
                     self.logger.debug("RAPL PKG power polling error: %s", e)
 
-        # 2. LHM/OHM WMI fallback
+        # 2. Elevated LibreHardwareMonitor bridge
+        bridge_power = self._read_lhm_bridge().get("cpu_power")
+        if bridge_power is not None:
+            return bridge_power
+
+        # 3. LHM/OHM WMI fallback
         self._init_ohm_wmi()
         if self._wmi_ohm:
             try:
@@ -476,6 +504,56 @@ class StatsMonitorThread(QThread):
                 self.logger.debug("LHM/OHM CPU power error: %s", e)
 
         return None
+
+    def _read_lhm_bridge(self) -> Dict[str, float]:
+        """Reads elevated LibreHardwareMonitor bridge readings from ProgramData."""
+        now = time.monotonic()
+        if self._lhm_bridge_cache is not None and now - self._lhm_bridge_cache_time < 0.5:
+            return self._lhm_bridge_cache
+
+        readings: Dict[str, float] = {}
+        try:
+            with open(self._lhm_bridge_path, "r", encoding="utf-8-sig") as fh:
+                data = json.load(fh)
+
+            timestamp = float(data.get("timestamp", 0.0))
+            if timestamp <= 0.0 or time.time() - timestamp > 10.0:
+                if not self._lhm_bridge_logged_stale:
+                    self._lhm_bridge_logged_stale = True
+                    self.logger.info("LibreHardwareMonitor bridge readings are stale or missing timestamps.")
+                self._lhm_bridge_cache = readings
+                self._lhm_bridge_cache_time = now
+                return readings
+
+            for key, upper_bound in (
+                ("cpu_temp", 150.0),
+                ("gpu_temp", 150.0),
+                ("cpu_power", 1000.0),
+                ("gpu_power", 1000.0),
+            ):
+                value = data.get(key)
+                if value is None:
+                    continue
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if 0.0 < numeric < upper_bound:
+                    readings[key] = numeric
+
+            if readings and not self._lhm_bridge_logged_available:
+                self._lhm_bridge_logged_available = True
+                self.logger.info("LibreHardwareMonitor bridge detected at %s.", self._lhm_bridge_path)
+        except FileNotFoundError:
+            if not self._lhm_bridge_logged_unavailable:
+                self._lhm_bridge_logged_unavailable = True
+                self.logger.debug("LibreHardwareMonitor bridge file not found: %s", self._lhm_bridge_path)
+        except Exception as e:
+            self.logger.debug("LibreHardwareMonitor bridge read error: %s", e)
+
+        self._lhm_bridge_cache = readings
+        self._lhm_bridge_cache_time = now
+        return readings
 
     def _init_ohm_wmi(self) -> None:
         """
@@ -515,14 +593,20 @@ class StatsMonitorThread(QThread):
     def _poll_cpu_temperature(self) -> Optional[float]:
         """
         Polls CPU temperature, trying sources in order:
-          1. PDH Thermal Zone Information  (standard ACPI)
-          2. LibreHardwareMonitor / OpenHardwareMonitor WMI  (if running)
-          3. WMI MSAcpi_ThermalZoneTemperature  (legacy ACPI fallback)
+          1. Elevated LibreHardwareMonitor bridge
+          2. PDH Thermal Zone Information  (standard ACPI)
+          3. LibreHardwareMonitor / OpenHardwareMonitor WMI  (if running)
+          4. WMI MSAcpi_ThermalZoneTemperature  (legacy ACPI fallback)
 
         Note: Modern Intel/AMD CPUs often require a kernel-driver tool
         (LibreHardwareMonitor, HWiNFO64, etc.) — see the settings note.
         """
-        # 1. PDH Thermal Zone Information
+        # 1. Elevated LibreHardwareMonitor bridge
+        bridge_temp = self._read_lhm_bridge().get("cpu_temp")
+        if bridge_temp is not None:
+            return bridge_temp
+
+        # 2. PDH Thermal Zone Information
         if win32pdh:
             if not self._thermal_query:
                 self._init_thermal_query()
@@ -561,7 +645,7 @@ class StatsMonitorThread(QThread):
                 except Exception as e:
                     self.logger.debug("Thermal PDH polling error: %s", e)
 
-        # 2. LibreHardwareMonitor / OpenHardwareMonitor
+        # 3. LibreHardwareMonitor / OpenHardwareMonitor
         self._init_ohm_wmi()
         if self._wmi_ohm:
             try:
@@ -589,7 +673,7 @@ class StatsMonitorThread(QThread):
                 self.logger.debug("OHM/LHM CPU temp error: %s", e)
                 self._wmi_ohm = None
 
-        # 3. WMI MSAcpi_ThermalZoneTemperature (legacy ACPI fallback)
+        # 4. WMI MSAcpi_ThermalZoneTemperature (legacy ACPI fallback)
         if not win32com.client:
             return None
         try:
