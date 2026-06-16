@@ -21,7 +21,7 @@ class RendererConstants:
 
     # --- Hardware stats compact block style ---
     STATS_BLOCK_LABEL_WIDTH: Final[int] = 8
-    STATS_BLOCK_GRAPH_WIDTH: Final[int] = 25
+    STATS_BLOCK_GRAPH_WIDTH: Final[int] = 36
     STATS_BLOCK_GAP: Final[int] = 4
     STATS_BLOCK_INNER_GAP: Final[int] = 2
     STATS_BLOCK_MIN_HEIGHT: Final[int] = 18

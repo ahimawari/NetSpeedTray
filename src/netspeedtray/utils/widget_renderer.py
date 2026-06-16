@@ -574,7 +574,7 @@ class WidgetRenderer:
         label_rect = QRect(x, top, label_w, height)
 
         accent = self._stats_block_accent(color, available)
-        self._draw_vertical_block_label(painter, label, label_rect, accent, available)
+        self._draw_vertical_block_label(painter, label, label_rect, accent, self._stats_label_color(available), available)
 
         frame_fill = QColor(3, 6, 10)
         frame_fill.setAlpha(236 if available else 172)
@@ -599,6 +599,8 @@ class WidgetRenderer:
         else:
             self._draw_block_sparkline(painter, inner, history, pct, accent, available)
 
+        self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), pct, available)
+
         try:
             temp_ok = temp is not None and math.isfinite(float(temp))
         except Exception:
@@ -608,25 +610,30 @@ class WidgetRenderer:
             marker_color.setAlpha(210)
             painter.fillRect(QRect(graph_rect.right() - 2, graph_rect.top() + 2, 1, max(2, graph_rect.height() - 4)), marker_color)
 
-    def _draw_vertical_block_label(self, painter: QPainter, label: str, rect: QRect, color: QColor, available: bool) -> None:
+    def _draw_vertical_block_label(self, painter: QPainter, label: str, rect: QRect, accent: QColor,
+                                   text_color: QColor, available: bool) -> None:
         """Draws CPU/GPU letters stacked vertically inside the compact block label strip."""
         painter.save()
         try:
-            bg = QColor(color)
-            bg.setAlpha(54 if available else 22)
-            painter.fillRect(rect.adjusted(0, 1, -1, -1), bg)
+            accent_line = QColor(accent)
+            accent_line.setAlpha(210 if available else 80)
+            painter.fillRect(QRect(rect.right() - 1, rect.top() + 2, 1, max(1, rect.height() - 4)), accent_line)
 
             label_font = QFont(self.font.family(), max(4, min(6, rect.height() // 4)), constants.fonts.WEIGHT_BOLD)
             painter.setFont(label_font)
-            pen_color = QColor(color)
-            pen_color.setAlpha(255 if available else 120)
-            painter.setPen(QPen(pen_color, 1))
+            pen_color = QColor(text_color)
+            pen_color.setAlpha(255 if available else 130)
             letters = list(label[:3].upper())
             if not letters:
                 return
             step = rect.height() / len(letters)
+            shadow = self._opposite_text_color(pen_color)
+            shadow.setAlpha(90 if available else 45)
             for idx, ch in enumerate(letters):
                 char_rect = QRect(rect.left(), int(rect.top() + idx * step), rect.width(), max(1, int(math.ceil(step))))
+                painter.setPen(QPen(shadow, 1))
+                painter.drawText(char_rect.translated(1, 0), Qt.AlignmentFlag.AlignCenter, ch)
+                painter.setPen(QPen(pen_color, 1))
                 painter.drawText(char_rect, Qt.AlignmentFlag.AlignCenter, ch)
         finally:
             painter.restore()
@@ -755,6 +762,70 @@ class WidgetRenderer:
             cell_color.setAlpha(255 if idx < active else (42 if available else 16))
             painter.fillRect(cell, cell_color)
 
+    def _draw_block_value_text(self, painter: QPainter, rect: QRect, current_value: float, available: bool) -> None:
+        """Draws the compact numeric value inside a Stats-style graph block."""
+        if rect.width() <= 10 or rect.height() <= 8:
+            return
+
+        painter.save()
+        try:
+            value_text = "--" if not available else f"{int(round(self._bounded_percent(current_value)))}"
+            scale = max(1, min(2, (rect.height() - 4) // 5))
+            digit_w = 3 * scale
+            digit_h = 5 * scale
+            gap = max(1, scale)
+            total_w = (digit_w * len(value_text)) + (gap * max(0, len(value_text) - 1))
+            if total_w > rect.width() - 4:
+                scale = 1
+                digit_w = 3
+                digit_h = 5
+                gap = 1
+                total_w = (digit_w * len(value_text)) + (gap * max(0, len(value_text) - 1))
+
+            backing = QRect(
+                rect.left() + int((rect.width() - total_w - 4) / 2),
+                rect.top() + int((rect.height() - digit_h - 4) / 2),
+                total_w + 4,
+                digit_h + 4,
+            )
+
+            bg = QColor(0, 0, 0)
+            bg.setAlpha(178 if available else 95)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(bg)
+            painter.drawRoundedRect(backing, 2, 2)
+
+            fg = QColor(255, 255, 255)
+            fg.setAlpha(255 if available else 145)
+            x = backing.left() + 2
+            y = backing.top() + 2
+            for ch in value_text:
+                self._draw_pixel_glyph(painter, ch, x, y, scale, fg)
+                x += digit_w + gap
+        finally:
+            painter.restore()
+
+    @staticmethod
+    def _draw_pixel_glyph(painter: QPainter, ch: str, x: int, y: int, scale: int, color: QColor) -> None:
+        glyphs = {
+            "0": ("111", "101", "101", "101", "111"),
+            "1": ("010", "110", "010", "010", "111"),
+            "2": ("111", "001", "111", "100", "111"),
+            "3": ("111", "001", "111", "001", "111"),
+            "4": ("101", "101", "111", "001", "001"),
+            "5": ("111", "100", "111", "001", "111"),
+            "6": ("111", "100", "111", "101", "111"),
+            "7": ("111", "001", "010", "010", "010"),
+            "8": ("111", "101", "111", "101", "111"),
+            "9": ("111", "101", "111", "001", "111"),
+            "-": ("000", "000", "111", "000", "000"),
+        }
+        rows = glyphs.get(ch, glyphs["-"])
+        for row_idx, row in enumerate(rows):
+            for col_idx, pixel in enumerate(row):
+                if pixel == "1":
+                    painter.fillRect(QRect(x + col_idx * scale, y + row_idx * scale, scale, scale), color)
+
     @staticmethod
     def _memory_usage_percent(mem_info: Optional[Tuple[float, float]]) -> Optional[float]:
         if not mem_info or mem_info[0] is None:
@@ -775,6 +846,19 @@ class WidgetRenderer:
         if not available:
             accent = QColor(130, 142, 154)
         return accent.lighter(125)
+
+    def _stats_label_color(self, available: bool) -> QColor:
+        label_color = QColor(self.default_color)
+        if not label_color.isValid():
+            label_color = QColor(255, 255, 255)
+        if not available:
+            label_color.setAlpha(150)
+        return label_color
+
+    @staticmethod
+    def _opposite_text_color(color: QColor) -> QColor:
+        luminance = (0.2126 * color.redF()) + (0.7152 * color.greenF()) + (0.0722 * color.blueF())
+        return QColor(255, 255, 255) if luminance < 0.5 else QColor(0, 0, 0)
 
     @staticmethod
     def _bounded_percent(value: Any) -> float:
