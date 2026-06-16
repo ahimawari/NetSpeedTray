@@ -63,6 +63,7 @@ class TestInputHandler(unittest.TestCase):
         self.mock_widget.move = MagicMock()
         self.mock_widget.update_config = MagicMock()
         self.mock_widget.open_graph_window = MagicMock()
+        self.mock_widget.show_all_hardware_details = MagicMock()
         # Set geometry so pos() returns something
         self.mock_widget.setGeometry(100, 100, 200, 50)
         
@@ -149,13 +150,14 @@ class TestInputHandler(unittest.TestCase):
         # Since we didn't mock x() and y(), only move(), it returns the design values (100, 100)
         self.assertEqual(updates.get('position_x', 100), 100)
 
-    def test_double_click_opens_graph(self):
-        """Test Double Click calls open_graph_window."""
+    def test_double_click_shows_hardware_details(self):
+        """Test Double Click shows the hardware detail overview."""
         event = self._create_mouse_event(button=Qt.MouseButton.LeftButton)
         
         self.handler.handle_double_click(event)
         
-        self.mock_widget.open_graph_window.assert_called_once()
+        self.mock_widget.show_all_hardware_details.assert_called_once()
+        self.mock_widget.open_graph_window.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

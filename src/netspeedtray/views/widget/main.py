@@ -36,9 +36,11 @@ from netspeedtray.utils.taskbar_utils import (
 )
 
 from netspeedtray.utils.widget_renderer import WidgetRenderer as CoreWidgetRenderer, RenderConfig
+from netspeedtray.utils.helpers import format_speed
 from netspeedtray.core.system_events import SystemEventHandler
 from netspeedtray.views.widget.layout import WidgetLayoutManager
 from netspeedtray.views.widget.theme import WidgetThemeManager
+from netspeedtray.views.widget.details_popup import DetailRow, ModuleDetailPopup
 from netspeedtray.core.startup_manager import StartupManager
 from netspeedtray.core.config_controller import ConfigController
 from netspeedtray.core.update_checker import UpdateChecker
@@ -100,6 +102,7 @@ class NetworkSpeedWidget(QWidget):
         self._cached_layout_mode: str = 'vertical'  # Updated on taskbar changes
         self.graph_window: Optional[GraphWindow] = None
         self.app_activity_window: Optional[AppActivityWindow] = None
+        self.detail_popup: Optional[ModuleDetailPopup] = None
         self.update_checker: Optional[UpdateChecker] = None
         self.app_icon: QIcon
         # Note: self.current_font and self.current_metrics are initialized earlier before _init_managers()
@@ -122,6 +125,12 @@ class NetworkSpeedWidget(QWidget):
         self._current_cycle_mode: str = "network_only"
         self._cycle_timer = QTimer(self)
         self._cycle_timer.timeout.connect(self._rotate_cycle)
+        self._hover_detail_timer = QTimer(self)
+        self._hover_detail_timer.setSingleShot(True)
+        self._hover_detail_timer.timeout.connect(self._show_pending_hover_detail)
+        self._click_detail_timer = QTimer(self)
+        self._click_detail_timer.setSingleShot(True)
+        self._click_detail_timer.timeout.connect(self._show_pending_click_detail)
 
         self.taskbar_height: int = taskbar_height
         self._dragging: bool = False
@@ -133,6 +142,14 @@ class NetworkSpeedWidget(QWidget):
         self.last_tray_rect: Optional[Tuple[int, int, int, int]] = None
         self._taskbar_lost_count: int = 0
         self._will_quit_app: bool = False # Flag to distinguish hide vs exit
+        self._module_hit_rects: List[Tuple[str, QRect]] = []
+        self._detail_popup_key: Optional[str] = None
+        self._detail_popup_anchor: Optional[QPoint] = None
+        self._detail_popup_sticky: bool = False
+        self._pending_hover_key: Optional[str] = None
+        self._pending_hover_anchor: Optional[QPoint] = None
+        self._pending_click_key: Optional[str] = None
+        self._pending_click_anchor: Optional[QPoint] = None
         
         # Hooks for system events
         self.system_event_handler: SystemEventHandler
@@ -395,12 +412,14 @@ class NetworkSpeedWidget(QWidget):
         """
         self.upload_speed = upload_mbps
         self.download_speed = download_mbps
+        self._refresh_visible_detail_popup()
         self.update() # Trigger a repaint
 
 
     def update_cpu_usage(self, usage: float) -> None:
         """Update CPU usage and trigger repaint."""
         self.cpu_usage = usage
+        self._refresh_visible_detail_popup()
         if self.config.get("widget_display_mode") in ["cpu_only", "combined", "side_by_side", "cycle"]:
             self.layout_manager.resize_widget_for_font()
             self.update()
@@ -408,6 +427,7 @@ class NetworkSpeedWidget(QWidget):
     def update_gpu_usage(self, usage: float) -> None:
         """Update GPU usage and trigger repaint."""
         self.gpu_usage = usage
+        self._refresh_visible_detail_popup()
         if self.config.get("widget_display_mode") in ["gpu_only", "combined", "side_by_side", "cycle"]:
             self.layout_manager.resize_widget_for_font()
             self.update()
@@ -415,6 +435,7 @@ class NetworkSpeedWidget(QWidget):
     def update_cpu_temp(self, temp: float) -> None:
         """Update CPU temperature and trigger repaint."""
         self.cpu_temp = temp
+        self._refresh_visible_detail_popup()
         if self.config.get("widget_display_mode") in ["cpu_only", "combined", "side_by_side", "cycle"]:
             self.layout_manager.resize_widget_for_font()
             self.update()
@@ -422,6 +443,7 @@ class NetworkSpeedWidget(QWidget):
     def update_gpu_temp(self, temp: float) -> None:
         """Update GPU temperature and trigger repaint."""
         self.gpu_temp = temp
+        self._refresh_visible_detail_popup()
         if self.config.get("widget_display_mode") in ["gpu_only", "combined", "side_by_side", "cycle"]:
             self.layout_manager.resize_widget_for_font()
             self.update()
@@ -429,12 +451,14 @@ class NetworkSpeedWidget(QWidget):
     def update_cpu_power(self, power: float) -> None:
         """Update CPU power draw and trigger repaint."""
         self.cpu_power = power
+        self._refresh_visible_detail_popup()
         if self.config.get("widget_display_mode") in ["cpu_only", "combined", "side_by_side", "cycle"]:
             self.update()
 
     def update_gpu_power(self, power: float) -> None:
         """Update GPU power draw and trigger repaint."""
         self.gpu_power = power
+        self._refresh_visible_detail_popup()
         if self.config.get("widget_display_mode") in ["gpu_only", "combined", "side_by_side", "cycle"]:
             self.update()
 
@@ -442,6 +466,7 @@ class NetworkSpeedWidget(QWidget):
         """Update RAM info and trigger repaint."""
         self.ram_used = used
         self.ram_total = total
+        self._refresh_visible_detail_popup()
         if self.config.get("widget_display_mode") in ["cpu_only", "combined", "side_by_side", "cycle"]:
             self.layout_manager.resize_widget_for_font()
             self.update()
@@ -450,6 +475,7 @@ class NetworkSpeedWidget(QWidget):
         """Update VRAM info and trigger repaint."""
         self.vram_used = used
         self.vram_total = total if total >= 0 else None
+        self._refresh_visible_detail_popup()
         if self.config.get("widget_display_mode") in ["gpu_only", "combined", "side_by_side", "cycle"]:
             self.layout_manager.resize_widget_for_font()
             self.update()
@@ -458,6 +484,7 @@ class NetworkSpeedWidget(QWidget):
         # Legacy method kept for safety but we prefer the individual ones above
         if cpu is not None: self.cpu_usage = cpu
         if gpu is not None: self.gpu_usage = gpu
+        self._refresh_visible_detail_popup()
         self.update()
 
 
@@ -472,6 +499,416 @@ class NetworkSpeedWidget(QWidget):
         self._cycle_index = (self._cycle_index + 1) % len(modes)
         self._current_cycle_mode = modes[self._cycle_index]
         self.update() # Trigger repaint with new mode
+
+
+    def schedule_hover_detail(self, local_pos: QPoint, global_pos: QPoint) -> None:
+        """Schedules a module detail popup for pointer hover."""
+        if self._detail_popup_sticky:
+            return
+
+        module_key = self._module_key_at_point(local_pos)
+        if not module_key:
+            self.unsetCursor()
+            self._hover_detail_timer.stop()
+            self.hide_hover_detail()
+            return
+
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        if module_key == self._pending_hover_key and self._hover_detail_timer.isActive():
+            return
+        if module_key == self._detail_popup_key and self.detail_popup and self.detail_popup.isVisible():
+            return
+
+        self._pending_hover_key = module_key
+        self._pending_hover_anchor = global_pos
+        self._hover_detail_timer.start(260)
+
+    def schedule_click_detail(self, local_pos: QPoint, global_pos: QPoint) -> None:
+        """Schedules a single-click detail popup, delayed so double-click can cancel it."""
+        module_key = self._module_key_at_point(local_pos)
+        if not module_key:
+            self.hide_detail_popup(force=True)
+            return
+
+        if (
+            self._detail_popup_sticky
+            and self._detail_popup_key == module_key
+            and self.detail_popup
+            and self.detail_popup.isVisible()
+        ):
+            self.hide_detail_popup(force=True)
+            return
+
+        self._pending_click_key = module_key
+        self._pending_click_anchor = global_pos
+        delay_ms = max(220, min(520, QApplication.doubleClickInterval() + 30))
+        self._click_detail_timer.start(delay_ms)
+
+    def cancel_pending_detail_popup(self) -> None:
+        """Cancels pending hover/click detail popups."""
+        self._hover_detail_timer.stop()
+        self._click_detail_timer.stop()
+        self._pending_hover_key = None
+        self._pending_hover_anchor = None
+        self._pending_click_key = None
+        self._pending_click_anchor = None
+
+    def hide_hover_detail(self) -> None:
+        """Hides non-sticky hover details."""
+        self._hover_detail_timer.stop()
+        if not self._detail_popup_sticky and self.detail_popup:
+            self.detail_popup.hide()
+            self._detail_popup_key = None
+            self._detail_popup_anchor = None
+
+    def hide_detail_popup(self, force: bool = False) -> None:
+        """Hides any visible detail popup."""
+        if force:
+            self._detail_popup_sticky = False
+        self.cancel_pending_detail_popup()
+        if self.detail_popup:
+            self.detail_popup.hide()
+        self._detail_popup_key = None
+        self._detail_popup_anchor = None
+
+    def _show_pending_hover_detail(self) -> None:
+        if self._pending_hover_key and self._pending_hover_anchor:
+            self._show_detail_popup(self._pending_hover_key, self._pending_hover_anchor, sticky=False)
+
+    def _show_pending_click_detail(self) -> None:
+        if self._pending_click_key and self._pending_click_anchor:
+            self._show_detail_popup(self._pending_click_key, self._pending_click_anchor, sticky=True)
+
+    def show_all_hardware_details(self, global_pos: QPoint) -> None:
+        """Shows the complete hardware detail popup."""
+        self.cancel_pending_detail_popup()
+        self._show_detail_popup("overview", global_pos, sticky=True)
+
+    def _show_detail_popup(self, module_key: str, anchor: QPoint, sticky: bool, keep_position: bool = False) -> None:
+        if self.detail_popup is None:
+            self.detail_popup = ModuleDetailPopup(parent=None)
+
+        title, rows, accent = self._build_module_detail(module_key)
+        if not rows:
+            return
+
+        if keep_position and self._detail_popup_anchor is not None:
+            anchor = self._detail_popup_anchor
+
+        self.detail_popup.set_content(title, rows, accent)
+        self.detail_popup.show_at(anchor)
+        self._detail_popup_key = module_key
+        self._detail_popup_anchor = anchor
+        self._detail_popup_sticky = sticky
+
+    def _refresh_visible_detail_popup(self) -> None:
+        if not self.detail_popup or not self.detail_popup.isVisible():
+            return
+        if not self._detail_popup_key or self._detail_popup_anchor is None:
+            return
+        self._show_detail_popup(
+            self._detail_popup_key,
+            self._detail_popup_anchor,
+            sticky=self._detail_popup_sticky,
+            keep_position=True,
+        )
+
+    def _module_key_at_point(self, point: QPoint) -> Optional[str]:
+        for key, rect in reversed(self._module_hit_rects):
+            if rect.contains(point):
+                return key
+        return None
+
+    def _reset_module_hit_rects(self) -> None:
+        self._module_hit_rects = []
+
+    def _register_module_hit_rect(self, module_key: str, rect: QRect) -> None:
+        if rect.isNull() or rect.width() <= 0 or rect.height() <= 0:
+            return
+        clipped = rect.adjusted(-2, -2, 2, 2).intersected(self.rect())
+        if clipped.isEmpty():
+            return
+        self._module_hit_rects.append((module_key, clipped))
+
+    def _register_network_hit_rect(self, x_offset: int = 0) -> None:
+        width = getattr(self.layout_manager, '_network_width', self.width() - x_offset)
+        self._register_module_hit_rect("network", QRect(x_offset, 0, max(1, int(width)), self.height()))
+
+    def _ordered_hardware_metric_keys(self, include_cpu: bool, include_gpu: bool) -> List[str]:
+        order = list(getattr(self.renderer.config, 'widget_display_order', ["network", "cpu", "gpu"]))
+        keys: List[str] = []
+        for key in order + ["cpu", "gpu"]:
+            if key == "cpu" and include_cpu and "cpu" not in keys:
+                keys.append("cpu")
+            elif key == "gpu" and include_gpu and "gpu" not in keys:
+                keys.append("gpu")
+        return keys
+
+    def _pixel_hud_hardware_keys(self, include_cpu: bool, include_gpu: bool) -> List[str]:
+        config = self.renderer.config
+        keys: List[str] = []
+        for key in self._ordered_hardware_metric_keys(include_cpu, include_gpu):
+            keys.append(key)
+            if key == "cpu" and getattr(config, "monitor_ram_enabled", False):
+                keys.append("ram")
+            elif key == "gpu" and getattr(config, "monitor_vram_enabled", False):
+                keys.append("vram")
+        if getattr(config, "show_hardware_temps", False) and (include_cpu or include_gpu):
+            keys.append("temp")
+        return keys
+
+    def _pixel_hud_block_rects(self, x_offset: int, keys: List[str], network: bool = False) -> List[Tuple[str, QRect]]:
+        if not keys:
+            return []
+
+        label_w = constants.renderer.PIXEL_HUD_LABEL_WIDTH
+        graph_w = constants.renderer.PIXEL_HUD_NETWORK_GRAPH_WIDTH if network else constants.renderer.PIXEL_HUD_GRAPH_WIDTH
+        inner_gap = constants.renderer.PIXEL_HUD_INNER_GAP
+        block_gap = constants.renderer.PIXEL_HUD_GAP
+        block_w = label_w + inner_gap + graph_w
+        margin = constants.renderer.TEXT_MARGIN
+        metrics_h = self.current_metrics.height() if self.current_metrics else constants.renderer.PIXEL_HUD_MIN_HEIGHT
+        block_h = max(
+            constants.renderer.PIXEL_HUD_MIN_HEIGHT,
+            min(self.height() - 4, metrics_h * 2 + 1),
+        )
+        top = int((self.height() - block_h) / 2)
+        current_x = x_offset + margin
+
+        rects: List[Tuple[str, QRect]] = []
+        for key in keys:
+            rects.append((key, QRect(current_x, top, block_w, block_h)))
+            current_x += block_w + block_gap
+        return rects
+
+    def _register_hardware_hit_rects(self, include_cpu: bool, include_gpu: bool, x_offset: int = 0) -> None:
+        config = self.renderer.config
+        if getattr(config, 'hardware_label_style', '') == "pixel_hud_blocks":
+            for key, rect in self._pixel_hud_block_rects(
+                x_offset,
+                self._pixel_hud_hardware_keys(include_cpu, include_gpu),
+                network=False,
+            ):
+                self._register_module_hit_rect(key, rect)
+            return
+
+        rect = self.renderer.get_last_text_rect()
+        if rect.isNull() or rect.width() <= 0:
+            return
+
+        keys = self._ordered_hardware_metric_keys(include_cpu, include_gpu)
+        if len(keys) <= 1:
+            self._register_module_hit_rect(keys[0] if keys else "hardware", QRect(rect.left(), 0, rect.width(), self.height()))
+            return
+
+        segment_h = max(1, self.height() // len(keys))
+        for idx, key in enumerate(keys):
+            self._register_module_hit_rect(key, QRect(rect.left(), idx * segment_h, rect.width(), segment_h))
+
+    def _format_speed_detail(self, mbps: float) -> str:
+        try:
+            bytes_per_sec = (float(mbps) * constants.network.units.MEGA_DIVISOR) / constants.network.units.BITS_PER_BYTE
+            return format_speed(
+                bytes_per_sec,
+                self.i18n,
+                force_mega_unit=self.config.get("speed_display_mode") == "always_mbps",
+                decimal_places=int(self.config.get("decimal_places", constants.config.defaults.DEFAULT_DECIMAL_PLACES)),
+                unit_type=str(self.config.get("unit_type", constants.config.defaults.DEFAULT_UNIT_TYPE)),
+                short_labels=bool(self.config.get("short_unit_labels", constants.config.defaults.DEFAULT_SHORT_UNIT_LABELS)),
+            )
+        except Exception:
+            return self.i18n.DEFAULT_TEXT
+
+    def _detail_label(self, key: str) -> str:
+        zh = getattr(self.i18n, "language", "") == "zh_CN"
+        labels = {
+            "current": ("当前", "Current"),
+            "usage": ("使用率", "Usage"),
+            "temperature": ("温度", "Temperature"),
+            "power": ("功耗", "Power"),
+            "memory": ("内存", "Memory"),
+            "vram": ("显存", "VRAM"),
+            "used": ("已用", "Used"),
+            "total": ("总量", "Total"),
+            "available": ("可用", "Available"),
+            "source": ("来源", "Source"),
+            "samples": ("样本", "Samples"),
+            "mode": ("模式", "Mode"),
+            "updated": ("更新", "Updated"),
+            "overview": ("硬件详情", "Hardware Details"),
+            "network": (self.i18n.ORDER_TYPE_NETWORK, self.i18n.ORDER_TYPE_NETWORK),
+            "cpu": (self.i18n.ORDER_TYPE_CPU, self.i18n.ORDER_TYPE_CPU),
+            "gpu": (self.i18n.ORDER_TYPE_GPU, self.i18n.ORDER_TYPE_GPU),
+        }
+        value = labels.get(key, (key, key))
+        return value[0] if zh else value[1]
+
+    def _format_optional_percent(self, value: Optional[float]) -> str:
+        try:
+            if value is None or not math.isfinite(float(value)):
+                return self.i18n.DEFAULT_TEXT
+            return f"{float(value):.0f}%"
+        except Exception:
+            return self.i18n.DEFAULT_TEXT
+
+    def _format_optional_temp(self, value: Optional[float]) -> str:
+        try:
+            if value is None or not math.isfinite(float(value)):
+                return self.i18n.DEFAULT_TEXT
+            return f"{float(value):.0f}°C"
+        except Exception:
+            return self.i18n.DEFAULT_TEXT
+
+    def _format_optional_power(self, value: Optional[float]) -> str:
+        try:
+            if value is None or not math.isfinite(float(value)):
+                return self.i18n.DEFAULT_TEXT
+            return f"{float(value):.1f} W"
+        except Exception:
+            return self.i18n.DEFAULT_TEXT
+
+    def _format_memory_detail(self, used: Optional[float], total: Optional[float]) -> str:
+        try:
+            if used is None or not math.isfinite(float(used)):
+                return self.i18n.DEFAULT_TEXT
+            if total is None or not math.isfinite(float(total)) or float(total) <= 0:
+                return f"{float(used):.1f} GB"
+            pct = (float(used) / float(total)) * 100.0
+            return f"{float(used):.1f}/{float(total):.1f} GB ({pct:.0f}%)"
+        except Exception:
+            return self.i18n.DEFAULT_TEXT
+
+    def _format_memory_percent(self, used: Optional[float], total: Optional[float]) -> str:
+        try:
+            if used is None or total is None or float(total) <= 0:
+                return self.i18n.DEFAULT_TEXT
+            return f"{(float(used) / float(total)) * 100.0:.0f}%"
+        except Exception:
+            return self.i18n.DEFAULT_TEXT
+
+    def _active_interface_summary(self) -> str:
+        try:
+            speed_data = getattr(self.controller, "current_speed_data", {}) or {}
+            if len(speed_data) == 1:
+                return next(iter(speed_data.keys()))
+            if len(speed_data) > 1:
+                suffix = "个接口" if getattr(self.i18n, "language", "") == "zh_CN" else "interfaces"
+                return f"{len(speed_data)} {suffix}"
+            primary = getattr(self.controller, "primary_interface", None)
+            return primary or self.i18n.DEFAULT_TEXT
+        except Exception:
+            return self.i18n.DEFAULT_TEXT
+
+    def _hardware_bridge_source(self) -> str:
+        try:
+            bridge_path = getattr(self.monitor_thread, "_lhm_bridge_path", "")
+            if bridge_path and os.path.exists(bridge_path):
+                return "NetSpeedTray Hardware Bridge"
+        except Exception:
+            pass
+        return self.i18n.DEFAULT_TEXT
+
+    def _module_title(self, module_key: str) -> str:
+        if module_key == "overview":
+            return self._detail_label("overview")
+        if module_key == "network":
+            return self._detail_label("network")
+        if module_key == "cpu":
+            return self._detail_label("cpu")
+        if module_key == "gpu":
+            return self._detail_label("gpu")
+        if module_key == "ram":
+            return "RAM"
+        if module_key == "vram":
+            return "VRAM"
+        if module_key == "temp":
+            return "CPU / GPU Temp"
+        return module_key.upper()
+
+    def _module_accent(self, module_key: str) -> str:
+        accents = {
+            "network": constants.graph.UPLOAD_LINE_COLOR,
+            "cpu": constants.renderer.PIXEL_HUD_CPU_COLOR,
+            "gpu": constants.renderer.PIXEL_HUD_GPU_COLOR,
+            "ram": constants.renderer.PIXEL_HUD_RAM_COLOR,
+            "vram": constants.renderer.PIXEL_HUD_VRAM_COLOR,
+            "temp": constants.renderer.PIXEL_HUD_TEMP_COLOR,
+            "overview": "#18E8FF",
+        }
+        return accents.get(module_key, "#18E8FF")
+
+    def _build_module_detail(self, module_key: str) -> Tuple[str, List[DetailRow], str]:
+        accent = self._module_accent(module_key)
+
+        if module_key == "network":
+            rows = [
+                DetailRow(self.i18n.UPLOAD_LABEL, self._format_speed_detail(self.upload_speed), constants.graph.UPLOAD_LINE_COLOR),
+                DetailRow(self.i18n.DOWNLOAD_LABEL, self._format_speed_detail(self.download_speed), constants.graph.DOWNLOAD_LINE_COLOR),
+                DetailRow(self.i18n.INTERFACE_LABEL, self._active_interface_summary()),
+                DetailRow(self._detail_label("mode"), str(self.config.get("interface_mode", "auto"))),
+                DetailRow(self._detail_label("samples"), str(len(self.widget_state.aggregated_history))),
+            ]
+        elif module_key == "cpu":
+            rows = [
+                DetailRow(self._detail_label("usage"), self._format_optional_percent(self.cpu_usage), accent),
+                DetailRow(self._detail_label("temperature"), self._format_optional_temp(self.cpu_temp)),
+                DetailRow(self._detail_label("power"), self._format_optional_power(self.cpu_power)),
+                DetailRow("RAM", self._format_memory_detail(self.ram_used, self.ram_total), constants.renderer.PIXEL_HUD_RAM_COLOR),
+                DetailRow(self._detail_label("samples"), str(len(self.widget_state.cpu_history))),
+            ]
+        elif module_key == "gpu":
+            rows = [
+                DetailRow(self._detail_label("usage"), self._format_optional_percent(self.gpu_usage), accent),
+                DetailRow(self._detail_label("temperature"), self._format_optional_temp(self.gpu_temp)),
+                DetailRow(self._detail_label("power"), self._format_optional_power(self.gpu_power)),
+                DetailRow("VRAM", self._format_memory_detail(self.vram_used, self.vram_total), constants.renderer.PIXEL_HUD_VRAM_COLOR),
+                DetailRow(self._detail_label("samples"), str(len(self.widget_state.gpu_history))),
+            ]
+        elif module_key == "ram":
+            rows = [
+                DetailRow(self._detail_label("used"), self._format_memory_detail(self.ram_used, self.ram_total), accent),
+                DetailRow(self._detail_label("usage"), self._format_memory_percent(self.ram_used, self.ram_total), accent),
+                DetailRow(self._detail_label("available"), self._format_memory_detail(
+                    (self.ram_total - self.ram_used) if self.ram_total is not None and self.ram_used is not None else None,
+                    self.ram_total,
+                )),
+            ]
+        elif module_key == "vram":
+            rows = [
+                DetailRow(self._detail_label("used"), self._format_memory_detail(self.vram_used, self.vram_total), accent),
+                DetailRow(self._detail_label("usage"), self._format_memory_percent(self.vram_used, self.vram_total), accent),
+                DetailRow(self._detail_label("available"), self._format_memory_detail(
+                    (self.vram_total - self.vram_used) if self.vram_total is not None and self.vram_used is not None else None,
+                    self.vram_total,
+                )),
+            ]
+        elif module_key == "temp":
+            rows = [
+                DetailRow(f"{self._detail_label('cpu')} {self._detail_label('temperature')}", self._format_optional_temp(self.cpu_temp), constants.renderer.PIXEL_HUD_CPU_COLOR),
+                DetailRow(f"{self._detail_label('gpu')} {self._detail_label('temperature')}", self._format_optional_temp(self.gpu_temp), constants.renderer.PIXEL_HUD_GPU_COLOR),
+                DetailRow(f"{self._detail_label('cpu')} {self._detail_label('power')}", self._format_optional_power(self.cpu_power)),
+                DetailRow(f"{self._detail_label('gpu')} {self._detail_label('power')}", self._format_optional_power(self.gpu_power)),
+                DetailRow(self._detail_label("source"), self._hardware_bridge_source()),
+            ]
+        else:
+            rows = [
+                DetailRow(self._detail_label("network"), "", self._module_accent("network"), is_heading=True),
+                DetailRow(self.i18n.UPLOAD_LABEL, self._format_speed_detail(self.upload_speed), constants.graph.UPLOAD_LINE_COLOR),
+                DetailRow(self.i18n.DOWNLOAD_LABEL, self._format_speed_detail(self.download_speed), constants.graph.DOWNLOAD_LINE_COLOR),
+                DetailRow(self._detail_label("cpu"), "", self._module_accent("cpu"), is_heading=True),
+                DetailRow(self._detail_label("usage"), self._format_optional_percent(self.cpu_usage), constants.renderer.PIXEL_HUD_CPU_COLOR),
+                DetailRow(self._detail_label("temperature"), self._format_optional_temp(self.cpu_temp)),
+                DetailRow(self._detail_label("power"), self._format_optional_power(self.cpu_power)),
+                DetailRow("RAM", self._format_memory_detail(self.ram_used, self.ram_total), constants.renderer.PIXEL_HUD_RAM_COLOR),
+                DetailRow(self._detail_label("gpu"), "", self._module_accent("gpu"), is_heading=True),
+                DetailRow(self._detail_label("usage"), self._format_optional_percent(self.gpu_usage), constants.renderer.PIXEL_HUD_GPU_COLOR),
+                DetailRow(self._detail_label("temperature"), self._format_optional_temp(self.gpu_temp)),
+                DetailRow(self._detail_label("power"), self._format_optional_power(self.gpu_power)),
+                DetailRow("VRAM", self._format_memory_detail(self.vram_used, self.vram_total), constants.renderer.PIXEL_HUD_VRAM_COLOR),
+                DetailRow(self._detail_label("source"), self._hardware_bridge_source()),
+            ]
+
+        return self._module_title(module_key), rows, accent
 
 
 
@@ -584,6 +1021,7 @@ class NetworkSpeedWidget(QWidget):
 
             # 2. Visual Background
             self.renderer.draw_background(painter, self.rect(), render_config)
+            self._reset_module_hit_rects()
 
             if not self.renderer or not self.current_metrics:
                 self._draw_paint_error(painter, "Render Error")
@@ -633,16 +1071,20 @@ class NetworkSpeedWidget(QWidget):
                 painter, up_bytes, dw_bytes, self.width(), self.height(), config, layout,
                 speed_history=history,
             )
+            self._register_network_hit_rect(0)
         elif mode == "cpu_only":
             ram = (self.ram_used, self.ram_total) if config.monitor_ram_enabled else None
             self.renderer.draw_hardware_stats(painter, self.cpu_usage, None, self.width(), self.height(), config, self.cpu_temp, None, ram, None, layout, cpu_power=self.cpu_power, cpu_history=list(self.widget_state.cpu_history))
+            self._register_hardware_hit_rects(True, False, 0)
         elif mode == "gpu_only":
             vram = (self.vram_used, self.vram_total) if config.monitor_vram_enabled else None
             self.renderer.draw_hardware_stats(painter, None, self.gpu_usage, self.width(), self.height(), config, None, self.gpu_temp, None, vram, layout, gpu_power=self.gpu_power, gpu_history=list(self.widget_state.gpu_history))
+            self._register_hardware_hit_rects(False, True, 0)
         elif mode == "combined":
             ram = (self.ram_used, self.ram_total) if config.monitor_ram_enabled else None
             vram = (self.vram_used, self.vram_total) if config.monitor_vram_enabled else None
             self.renderer.draw_hardware_stats(painter, self.cpu_usage, self.gpu_usage, self.width(), self.height(), config, self.cpu_temp, self.gpu_temp, ram, vram, layout, cpu_power=self.cpu_power, gpu_power=self.gpu_power, cpu_history=list(self.widget_state.cpu_history), gpu_history=list(self.widget_state.gpu_history))
+            self._register_hardware_hit_rects(True, True, 0)
 
     def _draw_side_by_side_layout(self, painter: QPainter, config: RenderConfig, layout: str) -> None:
         """Helper for multi-segment side-by-side painting."""
@@ -688,16 +1130,20 @@ class NetworkSpeedWidget(QWidget):
                     painter, up_bytes, dw_bytes, self.width(), self.height(), config, layout,
                     x_offset=current_x, speed_history=history,
                 )
+                self._register_network_hit_rect(current_x)
             elif key == "cpu" and config.monitor_cpu_enabled:
                 ram = (self.ram_used, self.ram_total) if config.monitor_ram_enabled else None
                 self.renderer.draw_hardware_stats(painter, self.cpu_usage, None, self.width(), self.height(), config, self.cpu_temp, None, ram, None, layout, x_offset=current_x, cpu_power=self.cpu_power, cpu_history=list(self.widget_state.cpu_history))
+                self._register_hardware_hit_rects(True, False, current_x)
             elif key == "gpu" and config.monitor_gpu_enabled:
                 vram = (self.vram_used, self.vram_total) if config.monitor_vram_enabled else None
                 self.renderer.draw_hardware_stats(painter, None, self.gpu_usage, self.width(), self.height(), config, None, self.gpu_temp, None, vram, layout, x_offset=current_x, gpu_power=self.gpu_power, gpu_history=list(self.widget_state.gpu_history))
+                self._register_hardware_hit_rects(False, True, current_x)
             elif key == "hardware":
                 ram = (self.ram_used, self.ram_total) if config.monitor_ram_enabled else None
                 vram = (self.vram_used, self.vram_total) if config.monitor_vram_enabled else None
                 self.renderer.draw_hardware_stats(painter, self.cpu_usage, self.gpu_usage, self.width(), self.height(), config, self.cpu_temp, self.gpu_temp, ram, vram, layout, x_offset=current_x, cpu_power=self.cpu_power, gpu_power=self.gpu_power, cpu_history=list(self.widget_state.cpu_history), gpu_history=list(self.widget_state.gpu_history))
+                self._register_hardware_hit_rects(True, True, current_x)
             
             if key == "network":
                 current_x += getattr(self.layout_manager, '_network_width', self.renderer.get_last_text_rect().width()) + segment_gap
@@ -765,12 +1211,21 @@ class NetworkSpeedWidget(QWidget):
             self.input_handler.handle_double_click(event)
 
 
+    def leaveEvent(self, event: QEvent) -> None:
+        """Hide transient hover detail when the pointer leaves the widget."""
+        self.unsetCursor()
+        if self.input_handler:
+            self.input_handler.handle_leave()
+        super().leaveEvent(event)
+
+
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         """
         Shows the context menu. This handler is the primary mechanism for
         keyboard-invoked context menus and a fallback for mouse events.
         """
         try:
+            self.hide_detail_popup(force=True)
             if self.tray_manager:
                 self.tray_manager.show_context_menu()
             event.accept()
@@ -786,6 +1241,7 @@ class NetworkSpeedWidget(QWidget):
 
     def hideEvent(self, event: QHideEvent) -> None:
         self.logger.debug("Widget hideEvent triggered.")
+        self.hide_detail_popup(force=True)
         super().hideEvent(event)
 
 
@@ -1252,6 +1708,11 @@ class NetworkSpeedWidget(QWidget):
                 self.position_manager.stop_monitoring()
             
             if self._state_watcher_timer.isActive(): self._state_watcher_timer.stop()
+            if self._hover_detail_timer.isActive(): self._hover_detail_timer.stop()
+            if self._click_detail_timer.isActive(): self._click_detail_timer.stop()
+            if self.detail_popup:
+                self.detail_popup.close()
+                self.detail_popup = None
             
             # --- Stop the background monitor thread ---
             if hasattr(self, 'monitor_thread') and self.monitor_thread:

@@ -42,6 +42,8 @@ class InputHandler(QObject):
     def handle_mouse_press(self, event: QMouseEvent) -> None:
         """Handles mouse press start."""
         if event.button() == Qt.MouseButton.LeftButton:
+            if hasattr(self.widget, 'cancel_pending_detail_popup'):
+                self.widget.cancel_pending_detail_popup()
             self._drag_start_pos = event.globalPosition().toPoint() - self.widget.pos()
             self._is_dragging = False # Waiting for move to confirm drag
             event.accept()
@@ -49,7 +51,12 @@ class InputHandler(QObject):
     def handle_mouse_move(self, event: QMouseEvent) -> None:
         """Handles dragging logic."""
         if not (event.buttons() & Qt.MouseButton.LeftButton) or not self._drag_start_pos:
+            if hasattr(self.widget, 'schedule_hover_detail'):
+                self.widget.schedule_hover_detail(event.position().toPoint(), event.globalPosition().toPoint())
             return
+
+        if hasattr(self.widget, 'cancel_pending_detail_popup'):
+            self.widget.cancel_pending_detail_popup()
 
         # Check for minimum drag distance to prevent accidental moves (Fix for sticky Free Move)
         if (event.globalPosition().toPoint() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
@@ -78,17 +85,24 @@ class InputHandler(QObject):
                 self.widget._dragging = False
                 self._save_dragged_position()
                 self.logger.debug("Drag ended. Position saved: %s", self.widget.pos())
+            elif hasattr(self.widget, 'schedule_click_detail'):
+                self.widget.schedule_click_detail(event.position().toPoint(), event.globalPosition().toPoint())
             
             self._drag_start_pos = None
             event.accept()
 
     def handle_double_click(self, event: QMouseEvent) -> None:
-        """Handles double-click (Open Graph)."""
+        """Handles double-click (show all hardware details)."""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.logger.debug("Double-click detected. Opening Graph Window.")
-            if hasattr(self.widget, 'open_graph_window'):
-                self.widget.open_graph_window()
+            self.logger.debug("Double-click detected. Showing hardware detail overview.")
+            if hasattr(self.widget, 'show_all_hardware_details'):
+                self.widget.show_all_hardware_details(event.globalPosition().toPoint())
             event.accept()
+
+    def handle_leave(self) -> None:
+        """Handles pointer leaving the widget."""
+        if hasattr(self.widget, 'hide_hover_detail'):
+            self.widget.hide_hover_detail()
 
     def _save_dragged_position(self) -> None:
         """
