@@ -20,16 +20,16 @@ class RendererConstants:
     ARROW_NUMBER_GAP: Final[int] = 5
 
     # --- Pixel HUD compact block style ---
-    STATS_BLOCK_LABEL_WIDTH: Final[int] = 8
-    STATS_BLOCK_GRAPH_WIDTH: Final[int] = 36
-    STATS_BLOCK_NETWORK_GRAPH_WIDTH: Final[int] = 60
-    STATS_BLOCK_GAP: Final[int] = 4
-    STATS_BLOCK_INNER_GAP: Final[int] = 2
-    STATS_BLOCK_MIN_HEIGHT: Final[int] = 18
-    STATS_BLOCK_CPU_COLOR: Final[str] = "#18E8FF"
-    STATS_BLOCK_GPU_COLOR: Final[str] = "#FF4FB3"
-    STATS_BLOCK_RAM_COLOR: Final[str] = "#7CFF6B"
-    STATS_BLOCK_VRAM_COLOR: Final[str] = "#FFD166"
+    PIXEL_HUD_LABEL_WIDTH: Final[int] = 8
+    PIXEL_HUD_GRAPH_WIDTH: Final[int] = 36
+    PIXEL_HUD_NETWORK_GRAPH_WIDTH: Final[int] = 60
+    PIXEL_HUD_GAP: Final[int] = 4
+    PIXEL_HUD_INNER_GAP: Final[int] = 2
+    PIXEL_HUD_MIN_HEIGHT: Final[int] = 18
+    PIXEL_HUD_CPU_COLOR: Final[str] = "#18E8FF"
+    PIXEL_HUD_GPU_COLOR: Final[str] = "#FF4FB3"
+    PIXEL_HUD_RAM_COLOR: Final[str] = "#7CFF6B"
+    PIXEL_HUD_VRAM_COLOR: Final[str] = "#FFD166"
     
     # --- Sizing and Scaling ---
     GRAPH_HEIGHT_PERCENTAGE: Final[float] = 0.8

@@ -174,11 +174,11 @@ class WidgetLayoutManager:
                                         max_number_width + unit_gap +
                                         max_unit_width + margin)
 
-                if self.widget.config.get('hardware_label_style', 'icons_colored') in ("pixel_hud_blocks", "stats_blocks"):
+                if self.widget.config.get('hardware_label_style', 'icons_colored') == "pixel_hud_blocks":
                     calculated_width = (
-                        constants.renderer.STATS_BLOCK_LABEL_WIDTH +
-                        constants.renderer.STATS_BLOCK_INNER_GAP +
-                        constants.renderer.STATS_BLOCK_NETWORK_GRAPH_WIDTH +
+                        constants.renderer.PIXEL_HUD_LABEL_WIDTH +
+                        constants.renderer.PIXEL_HUD_INNER_GAP +
+                        constants.renderer.PIXEL_HUD_NETWORK_GRAPH_WIDTH +
                         (margin * 2)
                     )
 
@@ -191,22 +191,22 @@ class WidgetLayoutManager:
                 monitor_vram = self.widget.config.get("monitor_vram_enabled", False)
                 style = self.widget.config.get('hardware_label_style', 'icons_colored')
                 label_offset = self.metrics.horizontalAdvance("CPU ") if style == "text" else 14
-                stats_block_w = (
-                    constants.renderer.STATS_BLOCK_LABEL_WIDTH +
-                    constants.renderer.STATS_BLOCK_INNER_GAP +
-                    constants.renderer.STATS_BLOCK_GRAPH_WIDTH
+                pixel_hud_block_w = (
+                    constants.renderer.PIXEL_HUD_LABEL_WIDTH +
+                    constants.renderer.PIXEL_HUD_INNER_GAP +
+                    constants.renderer.PIXEL_HUD_GRAPH_WIDTH
                 )
 
-                def stats_blocks_width(count: int) -> int:
+                def pixel_hud_blocks_width(count: int) -> int:
                     if count <= 0:
                         return 0
                     return (
-                        (stats_block_w * count) +
-                        (constants.renderer.STATS_BLOCK_GAP * max(0, count - 1)) +
+                        (pixel_hud_block_w * count) +
+                        (constants.renderer.PIXEL_HUD_GAP * max(0, count - 1)) +
                         (margin * 2)
                     )
 
-                def stats_blocks_count(include_cpu: bool, include_gpu: bool) -> int:
+                def pixel_hud_blocks_count(include_cpu: bool, include_gpu: bool) -> int:
                     count = 0
                     if include_cpu:
                         count += 1
@@ -258,8 +258,8 @@ class WidgetLayoutManager:
 
                     cpu_width = 0
                     if "cpu" in display_order and monitor_cpu:
-                        if style in ("pixel_hud_blocks", "stats_blocks"):
-                            cpu_width = stats_blocks_width(stats_blocks_count(True, False))
+                        if style == "pixel_hud_blocks":
+                            cpu_width = pixel_hud_blocks_width(pixel_hud_blocks_count(True, False))
                         else:
                             cpu_width = label_offset + self.metrics.horizontalAdvance(" 100%")
                             if hw_suffix_width:
@@ -276,8 +276,8 @@ class WidgetLayoutManager:
                                 
                     gpu_width = 0
                     if "gpu" in display_order and monitor_gpu:
-                        if style in ("pixel_hud_blocks", "stats_blocks"):
-                            gpu_width = stats_blocks_width(stats_blocks_count(False, True))
+                        if style == "pixel_hud_blocks":
+                            gpu_width = pixel_hud_blocks_width(pixel_hud_blocks_count(False, True))
                         else:
                             gpu_width = label_offset + self.metrics.horizontalAdvance(" 100%")
                             if hw_suffix_width:
@@ -293,8 +293,8 @@ class WidgetLayoutManager:
                             gpu_width += margin # Reclaim Left Margin offset budget
                             
                     if stack_hw and monitor_cpu and monitor_gpu:
-                        if style in ("pixel_hud_blocks", "stats_blocks"):
-                            calculated_width_accum += stats_blocks_width(stats_blocks_count(True, True))
+                        if style == "pixel_hud_blocks":
+                            calculated_width_accum += pixel_hud_blocks_width(pixel_hud_blocks_count(True, True))
                         else:
                             calculated_width_accum += max(cpu_width, gpu_width)
                     else:
@@ -321,8 +321,8 @@ class WidgetLayoutManager:
                     else:
                         hw_suffix_w = 0
 
-                    if style in ("pixel_hud_blocks", "stats_blocks"):
-                        calculated_width = stats_blocks_width(stats_blocks_count(
+                    if style == "pixel_hud_blocks":
+                        calculated_width = pixel_hud_blocks_width(pixel_hud_blocks_count(
                             display_mode in ["cpu_only", "combined"],
                             display_mode in ["gpu_only", "combined"],
                         ))

@@ -161,8 +161,6 @@ class HardwarePage(QWidget):
 
         style_val = config.get("hardware_label_style", "icons_colored")
         style_idx = self.label_style.findData(style_val)
-        if style_idx < 0 and style_val == "stats_blocks":
-            style_idx = self.label_style.findData("pixel_hud_blocks")
         if style_idx >= 0:
             self.label_style.setCurrentIndex(style_idx)
 

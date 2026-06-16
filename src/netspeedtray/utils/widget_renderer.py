@@ -254,8 +254,8 @@ class WidgetRenderer:
                 short_labels=config.short_unit_labels, split_unit=True
             )
 
-            if getattr(config, "hardware_label_style", "") in ("pixel_hud_blocks", "stats_blocks"):
-                self._draw_network_stats_block(
+            if getattr(config, "hardware_label_style", "") == "pixel_hud_blocks":
+                self._draw_network_pixel_hud_block(
                     painter,
                     upload,
                     download,
@@ -371,19 +371,19 @@ class WidgetRenderer:
         if not config.hide_unit_suffix:
             painter.drawText(unit_x, y, unit)
 
-    def _draw_network_stats_block(self, painter: QPainter, upload: float, download: float,
-                                  up_val: str, down_val: str, width: int, height: int,
-                                  config: RenderConfig, x_offset: int) -> None:
+    def _draw_network_pixel_hud_block(self, painter: QPainter, upload: float, download: float,
+                                      up_val: str, down_val: str, width: int, height: int,
+                                      config: RenderConfig, x_offset: int) -> None:
         """Draws a compact pixel HUD network block."""
         painter.save()
         try:
-            label_w = constants.renderer.STATS_BLOCK_LABEL_WIDTH
-            graph_w = constants.renderer.STATS_BLOCK_NETWORK_GRAPH_WIDTH
-            inner_gap = constants.renderer.STATS_BLOCK_INNER_GAP
+            label_w = constants.renderer.PIXEL_HUD_LABEL_WIDTH
+            graph_w = constants.renderer.PIXEL_HUD_NETWORK_GRAPH_WIDTH
+            inner_gap = constants.renderer.PIXEL_HUD_INNER_GAP
             block_w = label_w + inner_gap + graph_w
             margin = constants.renderer.TEXT_MARGIN
             block_h = max(
-                constants.renderer.STATS_BLOCK_MIN_HEIGHT,
+                constants.renderer.PIXEL_HUD_MIN_HEIGHT,
                 min(height - 4, self.metrics.height() * 2 + 1),
             )
             top = int((height - block_h) / 2)
@@ -399,7 +399,7 @@ class WidgetRenderer:
             upload_color = QColor(constants.graph.UPLOAD_LINE_COLOR).lighter(130)
             download_color = QColor(constants.graph.DOWNLOAD_LINE_COLOR).lighter(125)
             accent = QColor(constants.graph.UPLOAD_LINE_COLOR).lighter(125)
-            self._draw_vertical_block_label(painter, "NET", label_rect, accent, self._stats_label_color(True), True)
+            self._draw_vertical_block_label(painter, "NET", label_rect, accent, self._pixel_hud_label_color(True), True)
 
             self._draw_pixel_hud_frame(painter, graph_rect, accent, True)
 
@@ -642,9 +642,9 @@ class WidgetRenderer:
             gpu_idx = order.index("gpu") if "gpu" in order else 999
 
             style = getattr(config, 'hardware_label_style', 'icons_colored')
-            if style in ("pixel_hud_blocks", "stats_blocks"):
-                cpu_color = constants.renderer.STATS_BLOCK_CPU_COLOR
-                gpu_color = constants.renderer.STATS_BLOCK_GPU_COLOR
+            if style == "pixel_hud_blocks":
+                cpu_color = constants.renderer.PIXEL_HUD_CPU_COLOR
+                gpu_color = constants.renderer.PIXEL_HUD_GPU_COLOR
             else:
                 cpu_color = "#FFFFFF" if style == "icons_monochrome" else constants.renderer.CPU_LINE_COLOR
                 gpu_color = "#FFFFFF" if style == "icons_monochrome" else constants.renderer.GPU_LINE_COLOR
@@ -660,8 +660,8 @@ class WidgetRenderer:
 
             if not enabled_stats: return
 
-            if style in ("pixel_hud_blocks", "stats_blocks"):
-                self._draw_stats_blocks(
+            if style == "pixel_hud_blocks":
+                self._draw_pixel_hud_blocks(
                     painter,
                     enabled_stats,
                     width,
@@ -739,31 +739,31 @@ class WidgetRenderer:
         except Exception as e:
             self.logger.error("Failed to draw hardware stats: %s", e)
 
-    def _draw_stats_blocks(self, painter: QPainter, enabled_stats: List[Tuple[str, float, Optional[float], Any, str, Optional[float]]],
-                           width: int, height: int, config: RenderConfig, x_offset: int,
-                           histories: Dict[str, List[Any]]) -> None:
+    def _draw_pixel_hud_blocks(self, painter: QPainter, enabled_stats: List[Tuple[str, float, Optional[float], Any, str, Optional[float]]],
+                               width: int, height: int, config: RenderConfig, x_offset: int,
+                               histories: Dict[str, List[Any]]) -> None:
         """Draws compact pixel HUD hardware blocks with vertical labels and tiny charts."""
-        blocks = self._build_stats_blocks(enabled_stats, config, histories)
+        blocks = self._build_pixel_hud_blocks(enabled_stats, config, histories)
         if not blocks:
             return
 
         painter.save()
         try:
-            label_w = constants.renderer.STATS_BLOCK_LABEL_WIDTH
-            graph_w = constants.renderer.STATS_BLOCK_GRAPH_WIDTH
-            inner_gap = constants.renderer.STATS_BLOCK_INNER_GAP
-            block_gap = constants.renderer.STATS_BLOCK_GAP
+            label_w = constants.renderer.PIXEL_HUD_LABEL_WIDTH
+            graph_w = constants.renderer.PIXEL_HUD_GRAPH_WIDTH
+            inner_gap = constants.renderer.PIXEL_HUD_INNER_GAP
+            block_gap = constants.renderer.PIXEL_HUD_GAP
             block_w = label_w + inner_gap + graph_w
             margin = constants.renderer.TEXT_MARGIN
             block_h = max(
-                constants.renderer.STATS_BLOCK_MIN_HEIGHT,
+                constants.renderer.PIXEL_HUD_MIN_HEIGHT,
                 min(height - 4, self.metrics.height() * 2 + 1),
             )
             top = int((height - block_h) / 2)
             current_x = x_offset + margin
 
             for block in blocks:
-                self._draw_stats_block(
+                self._draw_pixel_hud_block(
                     painter,
                     block["label"],
                     block["value"],
@@ -784,8 +784,8 @@ class WidgetRenderer:
         finally:
             painter.restore()
 
-    def _build_stats_blocks(self, enabled_stats: List[Tuple[str, float, Optional[float], Any, str, Optional[float]]],
-                            config: RenderConfig, histories: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
+    def _build_pixel_hud_blocks(self, enabled_stats: List[Tuple[str, float, Optional[float], Any, str, Optional[float]]],
+                                config: RenderConfig, histories: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
         """Builds semantic compact blocks for utilization and memory-capacity metrics."""
         blocks: List[Dict[str, Any]] = []
 
@@ -808,7 +808,7 @@ class WidgetRenderer:
                     "value": mem_pct if mem_pct is not None else 0.0,
                     "temp": None,
                     "history": [],
-                    "color": QColor(constants.renderer.STATS_BLOCK_RAM_COLOR),
+                    "color": QColor(constants.renderer.PIXEL_HUD_RAM_COLOR),
                     "kind": "capacity",
                     "available": mem_pct is not None,
                 })
@@ -819,19 +819,19 @@ class WidgetRenderer:
                     "value": vram_pct if vram_pct is not None else 0.0,
                     "temp": None,
                     "history": [],
-                    "color": QColor(constants.renderer.STATS_BLOCK_VRAM_COLOR),
+                    "color": QColor(constants.renderer.PIXEL_HUD_VRAM_COLOR),
                     "kind": "grid",
                     "available": vram_pct is not None,
                 })
 
         return blocks
 
-    def _draw_stats_block(self, painter: QPainter, label: str, value: float, temp: Optional[float], history: List[Any],
-                          x: int, top: int, width: int, height: int, color: QColor,
-                          kind: str, available: bool) -> None:
+    def _draw_pixel_hud_block(self, painter: QPainter, label: str, value: float, temp: Optional[float], history: List[Any],
+                              x: int, top: int, width: int, height: int, color: QColor,
+                              kind: str, available: bool) -> None:
         """Draws one compact hardware block using the metric-specific mini visualization."""
-        label_w = constants.renderer.STATS_BLOCK_LABEL_WIDTH
-        inner_gap = constants.renderer.STATS_BLOCK_INNER_GAP
+        label_w = constants.renderer.PIXEL_HUD_LABEL_WIDTH
+        inner_gap = constants.renderer.PIXEL_HUD_INNER_GAP
         graph_rect = QRect(
             x + label_w + inner_gap,
             top + 2,
@@ -840,8 +840,8 @@ class WidgetRenderer:
         )
         label_rect = QRect(x, top, label_w, height)
 
-        accent = self._stats_block_accent(color, available)
-        self._draw_vertical_block_label(painter, label, label_rect, accent, self._stats_label_color(available), available)
+        accent = self._pixel_hud_accent(color, available)
+        self._draw_vertical_block_label(painter, label, label_rect, accent, self._pixel_hud_label_color(available), available)
 
         self._draw_pixel_hud_frame(painter, graph_rect, accent, available)
 
@@ -1113,13 +1113,13 @@ class WidgetRenderer:
             return None
 
     @staticmethod
-    def _stats_block_accent(color: QColor, available: bool) -> QColor:
+    def _pixel_hud_accent(color: QColor, available: bool) -> QColor:
         accent = QColor(color)
         if not available:
             accent = QColor(130, 142, 154)
         return accent.lighter(125)
 
-    def _stats_label_color(self, available: bool) -> QColor:
+    def _pixel_hud_label_color(self, available: bool) -> QColor:
         label_color = QColor(self.default_color)
         if not label_color.isValid():
             label_color = QColor(255, 255, 255)
