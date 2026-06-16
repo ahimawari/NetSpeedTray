@@ -1035,17 +1035,22 @@ class WidgetRenderer:
                 digit_h + (pad_y * 2),
             )
 
-            bg = QColor(0, 0, 0)
-            bg.setAlpha(178 if available else 95)
-            painter.setPen(Qt.PenStyle.NoPen)
+            bg = QColor(4, 8, 12)
+            bg.setAlpha(108 if available else 70)
+            border = QColor(255, 255, 255)
+            border.setAlpha(58 if available else 32)
+            painter.setPen(QPen(border, 1))
             painter.setBrush(bg)
             painter.drawRoundedRect(backing, 1, 1)
 
             fg = QColor(255, 255, 255)
-            fg.setAlpha(255 if available else 145)
+            fg.setAlpha(236 if available else 150)
+            shadow = QColor(0, 0, 0)
+            shadow.setAlpha(178 if available else 105)
             x = backing.left() + pad_x
             y = backing.top() + pad_y
             for ch in text:
+                self._draw_pixel_glyph(painter, ch, x, y + 1, scale, shadow)
                 self._draw_pixel_glyph(painter, ch, x, y, scale, fg)
                 x += digit_w + gap
         finally:
