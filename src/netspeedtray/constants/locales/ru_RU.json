@@ -86,6 +86,7 @@
     "HARDWARE_LABEL_STYLE_COLORED_ICONS": "Цветные значки",
     "HARDWARE_LABEL_STYLE_MONOCHROME_ICONS": "Монохромные значки (белые)",
     "HARDWARE_LABEL_STYLE_TEXT_LABELS": "Текстовые метки (CPU, GPU)",
+    "HARDWARE_LABEL_STYLE_STATS_BLOCKS": "Компактные блоки в стиле Stats",
     "WIDGET_DISPLAY_MODE_LABEL": "Режим отображения виджета",
     "WIDGET_SEGMENT_GAP_LABEL": "Segment Gap",
     "DISPLAY_MODE_NETWORK": "Только сеть",

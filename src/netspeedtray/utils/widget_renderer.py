@@ -366,7 +366,8 @@ class WidgetRenderer:
                            ram_info: Optional[Tuple[float, float]] = None,
                            vram_info: Optional[Tuple[float, float]] = None,
                            layout_mode: str = 'vertical', x_offset: int = 0, fixed_width: Optional[int] = None,
-                           cpu_power: Optional[float] = None, gpu_power: Optional[float] = None) -> None:
+                           cpu_power: Optional[float] = None, gpu_power: Optional[float] = None,
+                           cpu_history: Optional[List[Any]] = None, gpu_history: Optional[List[Any]] = None) -> None:
         """Draws CPU and/or GPU utilization statistics with optional temperature, power, and memory."""
         try:
             order = getattr(config, 'widget_display_order', ["network", "cpu", "gpu"])
@@ -374,8 +375,12 @@ class WidgetRenderer:
             gpu_idx = order.index("gpu") if "gpu" in order else 999
 
             style = getattr(config, 'hardware_label_style', 'icons_colored')
-            cpu_color = "#FFFFFF" if style == "icons_monochrome" else constants.renderer.CPU_LINE_COLOR
-            gpu_color = "#FFFFFF" if style == "icons_monochrome" else constants.renderer.GPU_LINE_COLOR
+            if style == "stats_blocks":
+                cpu_color = constants.renderer.STATS_BLOCK_CPU_COLOR
+                gpu_color = constants.renderer.STATS_BLOCK_GPU_COLOR
+            else:
+                cpu_color = "#FFFFFF" if style == "icons_monochrome" else constants.renderer.CPU_LINE_COLOR
+                gpu_color = "#FFFFFF" if style == "icons_monochrome" else constants.renderer.GPU_LINE_COLOR
 
             items = []
             if cpu_usage is not None:
@@ -387,6 +392,18 @@ class WidgetRenderer:
             enabled_stats = [x[1] for x in items]
 
             if not enabled_stats: return
+
+            if style == "stats_blocks":
+                self._draw_stats_blocks(
+                    painter,
+                    enabled_stats,
+                    width,
+                    height,
+                    config,
+                    x_offset,
+                    {"CPU": cpu_history or [], "GPU": gpu_history or []},
+                )
+                return
 
             painter.setFont(self.font)
 
@@ -454,6 +471,320 @@ class WidgetRenderer:
 
         except Exception as e:
             self.logger.error("Failed to draw hardware stats: %s", e)
+
+    def _draw_stats_blocks(self, painter: QPainter, enabled_stats: List[Tuple[str, float, Optional[float], Any, str, Optional[float]]],
+                           width: int, height: int, config: RenderConfig, x_offset: int,
+                           histories: Dict[str, List[Any]]) -> None:
+        """Draws compact Stats-style hardware blocks with vertical labels and tiny charts."""
+        blocks = self._build_stats_blocks(enabled_stats, config, histories)
+        if not blocks:
+            return
+
+        painter.save()
+        try:
+            label_w = constants.renderer.STATS_BLOCK_LABEL_WIDTH
+            graph_w = constants.renderer.STATS_BLOCK_GRAPH_WIDTH
+            inner_gap = constants.renderer.STATS_BLOCK_INNER_GAP
+            block_gap = constants.renderer.STATS_BLOCK_GAP
+            block_w = label_w + inner_gap + graph_w
+            margin = constants.renderer.TEXT_MARGIN
+            block_h = max(
+                constants.renderer.STATS_BLOCK_MIN_HEIGHT,
+                min(height - 4, self.metrics.height() * 2 + 1),
+            )
+            top = int((height - block_h) / 2)
+            current_x = x_offset + margin
+
+            for block in blocks:
+                self._draw_stats_block(
+                    painter,
+                    block["label"],
+                    block["value"],
+                    block["temp"],
+                    block["history"],
+                    current_x,
+                    top,
+                    block_w,
+                    block_h,
+                    block["color"],
+                    block["kind"],
+                    block["available"],
+                )
+                current_x += block_w + block_gap
+
+            total_w = (block_w * len(blocks)) + (block_gap * max(0, len(blocks) - 1)) + (margin * 2)
+            self._last_text_rect = QRect(x_offset, top, total_w, block_h)
+        finally:
+            painter.restore()
+
+    def _build_stats_blocks(self, enabled_stats: List[Tuple[str, float, Optional[float], Any, str, Optional[float]]],
+                            config: RenderConfig, histories: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
+        """Builds semantic compact blocks for utilization and memory-capacity metrics."""
+        blocks: List[Dict[str, Any]] = []
+
+        for label, value, temp, mem_info, color_hex, _power in enabled_stats:
+            metric = str(label).upper()
+            blocks.append({
+                "label": metric,
+                "value": self._bounded_percent(value),
+                "temp": temp,
+                "history": histories.get(metric, []),
+                "color": QColor(color_hex),
+                "kind": "line" if metric == "CPU" else "bars",
+                "available": True,
+            })
+
+            if metric == "CPU" and getattr(config, "monitor_ram_enabled", False):
+                mem_pct = self._memory_usage_percent(mem_info)
+                blocks.append({
+                    "label": "MEM",
+                    "value": mem_pct if mem_pct is not None else 0.0,
+                    "temp": None,
+                    "history": [],
+                    "color": QColor(constants.renderer.STATS_BLOCK_RAM_COLOR),
+                    "kind": "capacity",
+                    "available": mem_pct is not None,
+                })
+            elif metric == "GPU" and getattr(config, "monitor_vram_enabled", False):
+                vram_pct = self._memory_usage_percent(mem_info)
+                blocks.append({
+                    "label": "VRM",
+                    "value": vram_pct if vram_pct is not None else 0.0,
+                    "temp": None,
+                    "history": [],
+                    "color": QColor(constants.renderer.STATS_BLOCK_VRAM_COLOR),
+                    "kind": "grid",
+                    "available": vram_pct is not None,
+                })
+
+        return blocks
+
+    def _draw_stats_block(self, painter: QPainter, label: str, value: float, temp: Optional[float], history: List[Any],
+                          x: int, top: int, width: int, height: int, color: QColor,
+                          kind: str, available: bool) -> None:
+        """Draws one compact hardware block using the metric-specific mini visualization."""
+        label_w = constants.renderer.STATS_BLOCK_LABEL_WIDTH
+        inner_gap = constants.renderer.STATS_BLOCK_INNER_GAP
+        graph_rect = QRect(
+            x + label_w + inner_gap,
+            top + 2,
+            max(4, width - label_w - inner_gap),
+            max(4, height - 4),
+        )
+        label_rect = QRect(x, top, label_w, height)
+
+        accent = self._stats_block_accent(color, available)
+        self._draw_vertical_block_label(painter, label, label_rect, accent, available)
+
+        frame_fill = QColor(3, 6, 10)
+        frame_fill.setAlpha(236 if available else 172)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(frame_fill)
+        painter.drawRoundedRect(graph_rect, 2, 2)
+
+        border = QColor(accent)
+        border.setAlpha(255 if available else 120)
+        painter.setPen(QPen(border, 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(graph_rect, 2, 2)
+
+        pct = self._bounded_percent(value)
+        inner = graph_rect.adjusted(2, 2, -2, -2)
+        if kind == "capacity":
+            self._draw_block_capacity(painter, inner, pct, accent, available)
+        elif kind == "grid":
+            self._draw_block_grid(painter, inner, pct, accent, available)
+        elif kind == "bars":
+            self._draw_block_bars(painter, inner, history, pct, accent, available)
+        else:
+            self._draw_block_sparkline(painter, inner, history, pct, accent, available)
+
+        try:
+            temp_ok = temp is not None and math.isfinite(float(temp))
+        except Exception:
+            temp_ok = False
+        if temp_ok:
+            marker_color = QColor(accent)
+            marker_color.setAlpha(210)
+            painter.fillRect(QRect(graph_rect.right() - 2, graph_rect.top() + 2, 1, max(2, graph_rect.height() - 4)), marker_color)
+
+    def _draw_vertical_block_label(self, painter: QPainter, label: str, rect: QRect, color: QColor, available: bool) -> None:
+        """Draws CPU/GPU letters stacked vertically inside the compact block label strip."""
+        painter.save()
+        try:
+            bg = QColor(color)
+            bg.setAlpha(54 if available else 22)
+            painter.fillRect(rect.adjusted(0, 1, -1, -1), bg)
+
+            label_font = QFont(self.font.family(), max(4, min(6, rect.height() // 4)), constants.fonts.WEIGHT_BOLD)
+            painter.setFont(label_font)
+            pen_color = QColor(color)
+            pen_color.setAlpha(255 if available else 120)
+            painter.setPen(QPen(pen_color, 1))
+            letters = list(label[:3].upper())
+            if not letters:
+                return
+            step = rect.height() / len(letters)
+            for idx, ch in enumerate(letters):
+                char_rect = QRect(rect.left(), int(rect.top() + idx * step), rect.width(), max(1, int(math.ceil(step))))
+                painter.drawText(char_rect, Qt.AlignmentFlag.AlignCenter, ch)
+        finally:
+            painter.restore()
+
+    def _draw_block_sparkline(self, painter: QPainter, rect: QRect, history: List[Any], current_value: float,
+                              color: QColor, available: bool) -> None:
+        """Draws a tiny utilization sparkline scaled to 0-100%."""
+        if rect.width() <= 1 or rect.height() <= 1:
+            return
+
+        values = []
+        for item in history[-max(2, rect.width()):]:
+            try:
+                values.append(self._bounded_percent(getattr(item, "value", item)))
+            except Exception:
+                continue
+        if len(values) < 2:
+            values = [current_value, current_value]
+
+        path = QPainterPath()
+        denom = max(1, len(values) - 1)
+        for idx, val in enumerate(values):
+            x = rect.left() + (idx / denom) * rect.width()
+            y = rect.bottom() - (val / 100.0) * rect.height()
+            point = QPointF(x, y)
+            if idx == 0:
+                path.moveTo(point)
+            else:
+                path.lineTo(point)
+
+        fill_h = max(1, int(rect.height() * self._bounded_percent(values[-1]) / 100.0))
+        fill = QColor(color)
+        fill.setAlpha(58 if available else 24)
+        painter.fillRect(QRect(rect.left(), rect.bottom() - fill_h, rect.width(), fill_h), fill)
+
+        glow = QColor(color)
+        glow.setAlpha(150 if available else 48)
+        painter.setPen(QPen(glow, 2))
+        painter.drawPath(path)
+
+        line = QColor(color)
+        line.setAlpha(255 if available else 96)
+        painter.setPen(QPen(line, 1))
+        painter.drawPath(path)
+
+        dot = QColor(color)
+        dot.setAlpha(255 if available else 96)
+        last_x = rect.right()
+        last_y = int(rect.bottom() - (values[-1] / 100.0) * rect.height())
+        painter.fillRect(QRect(last_x - 1, last_y - 1, 2, 2), dot)
+
+    def _draw_block_bars(self, painter: QPainter, rect: QRect, history: List[Any], current_value: float,
+                         color: QColor, available: bool) -> None:
+        """Draws compact vertical load bars for GPU-style bursty utilization."""
+        if rect.width() <= 1 or rect.height() <= 1:
+            return
+
+        max_bars = max(3, rect.width() // 3)
+        values: List[float] = []
+        for item in history[-max_bars:]:
+            try:
+                values.append(self._bounded_percent(getattr(item, "value", item)))
+            except Exception:
+                continue
+        if len(values) < 2:
+            values = [current_value] * max_bars
+
+        bar_gap = 1
+        bar_w = max(1, (rect.width() - (bar_gap * (len(values) - 1))) // len(values))
+        base_color = QColor(color)
+        base_color.setAlpha(42 if available else 18)
+        painter.fillRect(rect, base_color)
+
+        for idx, val in enumerate(values):
+            x = rect.left() + idx * (bar_w + bar_gap)
+            bar_h = max(1, int(rect.height() * val / 100.0))
+            bar_color = QColor(color)
+            bar_color.setAlpha(255 if available else 92)
+            painter.fillRect(QRect(x, rect.bottom() - bar_h + 1, bar_w, bar_h), bar_color)
+
+    def _draw_block_capacity(self, painter: QPainter, rect: QRect, current_value: float,
+                             color: QColor, available: bool) -> None:
+        """Draws a horizontal capacity gauge for RAM usage."""
+        if rect.width() <= 1 or rect.height() <= 1:
+            return
+
+        gauge = rect.adjusted(0, max(1, rect.height() // 4), 0, -max(1, rect.height() // 4))
+        track = QColor(color)
+        track.setAlpha(46 if available else 18)
+        painter.fillRect(gauge, track)
+
+        fill_w = max(1, int(gauge.width() * self._bounded_percent(current_value) / 100.0)) if available else 0
+        if fill_w:
+            fill = QColor(color)
+            fill.setAlpha(255)
+            painter.fillRect(QRect(gauge.left(), gauge.top(), fill_w, gauge.height()), fill)
+
+        tick = QColor(255, 255, 255)
+        tick.setAlpha(95 if available else 36)
+        for i in range(1, 4):
+            x = gauge.left() + int(gauge.width() * i / 4)
+            painter.fillRect(QRect(x, gauge.top(), 1, gauge.height()), tick)
+
+    def _draw_block_grid(self, painter: QPainter, rect: QRect, current_value: float,
+                         color: QColor, available: bool) -> None:
+        """Draws a tiled capacity grid for VRAM usage."""
+        if rect.width() <= 1 or rect.height() <= 1:
+            return
+
+        cols, rows, gap = 5, 3, 1
+        cell_w = max(1, (rect.width() - gap * (cols - 1)) // cols)
+        cell_h = max(1, (rect.height() - gap * (rows - 1)) // rows)
+        total = cols * rows
+        active = int(math.ceil(total * self._bounded_percent(current_value) / 100.0)) if available else 0
+
+        for idx in range(total):
+            col = idx % cols
+            row = rows - 1 - (idx // cols)
+            cell = QRect(
+                rect.left() + col * (cell_w + gap),
+                rect.top() + row * (cell_h + gap),
+                cell_w,
+                cell_h,
+            )
+            cell_color = QColor(color)
+            cell_color.setAlpha(255 if idx < active else (42 if available else 16))
+            painter.fillRect(cell, cell_color)
+
+    @staticmethod
+    def _memory_usage_percent(mem_info: Optional[Tuple[float, float]]) -> Optional[float]:
+        if not mem_info or mem_info[0] is None:
+            return None
+        try:
+            used, total = mem_info
+            used_value = float(used)
+            total_value = float(total)
+            if not math.isfinite(used_value) or not math.isfinite(total_value) or total_value <= 0:
+                return None
+            return max(0.0, min(100.0, (used_value / total_value) * 100.0))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _stats_block_accent(color: QColor, available: bool) -> QColor:
+        accent = QColor(color)
+        if not available:
+            accent = QColor(130, 142, 154)
+        return accent.lighter(125)
+
+    @staticmethod
+    def _bounded_percent(value: Any) -> float:
+        try:
+            numeric = float(value)
+        except Exception:
+            return 0.0
+        if not math.isfinite(numeric):
+            return 0.0
+        return max(0.0, min(100.0, numeric))
 
 
     def _draw_icon(self, painter: QPainter, icon_type: str, x: int, y_ascent: int, color: Optional[QColor] = None) -> None:

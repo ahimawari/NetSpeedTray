@@ -18,6 +18,17 @@ class RendererConstants:
     GRAPH_BOTTOM_PADDING: Final[int] = 1
     VALUE_UNIT_GAP: Final[int] = 5
     ARROW_NUMBER_GAP: Final[int] = 5
+
+    # --- Hardware stats compact block style ---
+    STATS_BLOCK_LABEL_WIDTH: Final[int] = 8
+    STATS_BLOCK_GRAPH_WIDTH: Final[int] = 25
+    STATS_BLOCK_GAP: Final[int] = 4
+    STATS_BLOCK_INNER_GAP: Final[int] = 2
+    STATS_BLOCK_MIN_HEIGHT: Final[int] = 18
+    STATS_BLOCK_CPU_COLOR: Final[str] = "#55CCFF"
+    STATS_BLOCK_GPU_COLOR: Final[str] = "#FF5A52"
+    STATS_BLOCK_RAM_COLOR: Final[str] = "#58E07A"
+    STATS_BLOCK_VRAM_COLOR: Final[str] = "#FFB347"
     
     # --- Sizing and Scaling ---
     GRAPH_HEIGHT_PERCENTAGE: Final[float] = 0.8

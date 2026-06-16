@@ -76,6 +76,7 @@ class HardwarePage(QWidget):
         self.label_style.addItem(self.i18n.HARDWARE_LABEL_STYLE_COLORED_ICONS, userData="icons_colored")
         self.label_style.addItem(self.i18n.HARDWARE_LABEL_STYLE_MONOCHROME_ICONS, userData="icons_monochrome")
         self.label_style.addItem(self.i18n.HARDWARE_LABEL_STYLE_TEXT_LABELS, userData="text")
+        self.label_style.addItem(self.i18n.HARDWARE_LABEL_STYLE_STATS_BLOCKS, userData="stats_blocks")
         self.label_style.currentIndexChanged.connect(self.on_change)
 
         hw_layout.addWidget(style_label, 7, 0, Qt.AlignmentFlag.AlignVCenter)

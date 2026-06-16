@@ -116,6 +116,7 @@ def mock_i18n():
     i18n.HARDWARE_LABEL_STYLE_COLORED_ICONS = "Colored icons"
     i18n.HARDWARE_LABEL_STYLE_MONOCHROME_ICONS = "Monochrome icons"
     i18n.HARDWARE_LABEL_STYLE_TEXT_LABELS = "Text labels"
+    i18n.HARDWARE_LABEL_STYLE_STATS_BLOCKS = "Stats compact blocks"
     i18n.WIDGET_DISPLAY_MODE_LABEL = "Widget Display Mode"
     i18n.WIDGET_SEGMENT_GAP_LABEL = "Segment Gap"
     i18n.DISPLAY_MODE_NETWORK = "Network only"

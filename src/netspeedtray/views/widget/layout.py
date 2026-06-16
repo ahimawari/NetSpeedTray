@@ -181,6 +181,35 @@ class WidgetLayoutManager:
                 display_mode = self.widget.config.get("widget_display_mode", "network_only")
                 monitor_ram = self.widget.config.get("monitor_ram_enabled", False)
                 monitor_vram = self.widget.config.get("monitor_vram_enabled", False)
+                style = self.widget.config.get('hardware_label_style', 'icons_colored')
+                label_offset = self.metrics.horizontalAdvance("CPU ") if style == "text" else 14
+                stats_block_w = (
+                    constants.renderer.STATS_BLOCK_LABEL_WIDTH +
+                    constants.renderer.STATS_BLOCK_INNER_GAP +
+                    constants.renderer.STATS_BLOCK_GRAPH_WIDTH
+                )
+
+                def stats_blocks_width(count: int) -> int:
+                    if count <= 0:
+                        return 0
+                    return (
+                        (stats_block_w * count) +
+                        (constants.renderer.STATS_BLOCK_GAP * max(0, count - 1)) +
+                        (margin * 2)
+                    )
+
+                def stats_blocks_count(include_cpu: bool, include_gpu: bool) -> int:
+                    count = 0
+                    if include_cpu:
+                        count += 1
+                        if monitor_ram:
+                            count += 1
+                    if include_gpu:
+                        count += 1
+                        if monitor_vram:
+                            count += 1
+                    return count
+
                 if display_mode == "side_by_side":
                     active_segments = 0
                     monitor_cpu = self.widget.config.get("monitor_cpu_enabled", False)
@@ -206,8 +235,6 @@ class WidgetLayoutManager:
                         calculated_width_accum += calculated_width
                         
                     # Calculate Sub-Widths
-                    style = self.widget.config.get('hardware_label_style', 'icons_colored')
-                    label_offset = self.metrics.horizontalAdvance("CPU ") if style == "text" else 14
                     show_temps = bool(self.widget.config.get("show_hardware_temps", False))
                     show_power = bool(self.widget.config.get("show_hardware_power", False))
                     # Compute suffix width based on which extras are enabled
@@ -223,38 +250,45 @@ class WidgetLayoutManager:
 
                     cpu_width = 0
                     if "cpu" in display_order and monitor_cpu:
-                        cpu_val = int(getattr(self.widget, 'cpu_usage', 0))
-                        cpu_width = label_offset + self.metrics.horizontalAdvance(" 100%")
-                        if hw_suffix_width:
-                            cpu_width += hw_suffix_width
-                        if monitor_ram and getattr(self.widget, 'ram_used', None) is not None:
-                            used = getattr(self.widget, 'ram_used', 0)
-                            total = getattr(self.widget, 'ram_total', -1.0)
-                            mem_text = f"{used:.1f}/{total:.1f}G" if total and total > 0 else f"{used:.1f}G"
-                            if stack_hw: # inline
-                                cpu_width += self.metrics.horizontalAdvance(f" | {mem_text}")
-                            else: # row
-                                cpu_width = max(cpu_width, self.metrics.horizontalAdvance(mem_text))
-                        cpu_width += margin # Reclaim Left Margin offset budget from draw_hardware_stats
+                        if style == "stats_blocks":
+                            cpu_width = stats_blocks_width(stats_blocks_count(True, False))
+                        else:
+                            cpu_width = label_offset + self.metrics.horizontalAdvance(" 100%")
+                            if hw_suffix_width:
+                                cpu_width += hw_suffix_width
+                            if monitor_ram and getattr(self.widget, 'ram_used', None) is not None:
+                                used = getattr(self.widget, 'ram_used', 0)
+                                total = getattr(self.widget, 'ram_total', -1.0)
+                                mem_text = f"{used:.1f}/{total:.1f}G" if total and total > 0 else f"{used:.1f}G"
+                                if stack_hw: # inline
+                                    cpu_width += self.metrics.horizontalAdvance(f" | {mem_text}")
+                                else: # row
+                                    cpu_width = max(cpu_width, self.metrics.horizontalAdvance(mem_text))
+                            cpu_width += margin # Reclaim Left Margin offset budget from draw_hardware_stats
                                 
                     gpu_width = 0
                     if "gpu" in display_order and monitor_gpu:
-                        gpu_val = int(getattr(self.widget, 'gpu_usage', 0))
-                        gpu_width = label_offset + self.metrics.horizontalAdvance(" 100%")
-                        if hw_suffix_width:
-                            gpu_width += hw_suffix_width
-                        if monitor_vram and getattr(self.widget, 'vram_used', None) is not None:
-                            used = getattr(self.widget, 'vram_used', 0)
-                            total = getattr(self.widget, 'vram_total', -1.0)
-                            mem_text = f"{used:.1f}/{total:.1f}G" if total and total > 0 else f"{used:.1f}G"
-                            if stack_hw: # inline
-                                gpu_width += self.metrics.horizontalAdvance(f" | {mem_text}")
-                            else: # row
-                                gpu_width = max(gpu_width, self.metrics.horizontalAdvance(mem_text))
-                        gpu_width += margin # Reclaim Left Margin offset budget
+                        if style == "stats_blocks":
+                            gpu_width = stats_blocks_width(stats_blocks_count(False, True))
+                        else:
+                            gpu_width = label_offset + self.metrics.horizontalAdvance(" 100%")
+                            if hw_suffix_width:
+                                gpu_width += hw_suffix_width
+                            if monitor_vram and getattr(self.widget, 'vram_used', None) is not None:
+                                used = getattr(self.widget, 'vram_used', 0)
+                                total = getattr(self.widget, 'vram_total', -1.0)
+                                mem_text = f"{used:.1f}/{total:.1f}G" if total and total > 0 else f"{used:.1f}G"
+                                if stack_hw: # inline
+                                    gpu_width += self.metrics.horizontalAdvance(f" | {mem_text}")
+                                else: # row
+                                    gpu_width = max(gpu_width, self.metrics.horizontalAdvance(mem_text))
+                            gpu_width += margin # Reclaim Left Margin offset budget
                             
                     if stack_hw and monitor_cpu and monitor_gpu:
-                        calculated_width_accum += max(cpu_width, gpu_width)
+                        if style == "stats_blocks":
+                            calculated_width_accum += stats_blocks_width(stats_blocks_count(True, True))
+                        else:
+                            calculated_width_accum += max(cpu_width, gpu_width)
                     else:
                         calculated_width_accum += cpu_width + gpu_width
                         
@@ -279,21 +313,27 @@ class WidgetLayoutManager:
                     else:
                         hw_suffix_w = 0
 
-                    if display_mode in ["cpu_only", "combined"]:
-                        cpu_width = label_offset + self.metrics.horizontalAdvance(" 100%")
-                        if hw_suffix_w:
-                            cpu_width += hw_suffix_w
-                        if monitor_ram and getattr(self.widget, 'ram_used', None) is not None:
-                            cpu_width += self.metrics.horizontalAdvance(" | 16.0/16.0G")
-                        calculated_width = max(calculated_width, cpu_width)
+                    if style == "stats_blocks":
+                        calculated_width = stats_blocks_width(stats_blocks_count(
+                            display_mode in ["cpu_only", "combined"],
+                            display_mode in ["gpu_only", "combined"],
+                        ))
+                    else:
+                        if display_mode in ["cpu_only", "combined"]:
+                            cpu_width = label_offset + self.metrics.horizontalAdvance(" 100%")
+                            if hw_suffix_w:
+                                cpu_width += hw_suffix_w
+                            if monitor_ram and getattr(self.widget, 'ram_used', None) is not None:
+                                cpu_width += self.metrics.horizontalAdvance(" | 16.0/16.0G")
+                            calculated_width = max(calculated_width, cpu_width)
 
-                    if display_mode in ["gpu_only", "combined"]:
-                        gpu_width = label_offset + self.metrics.horizontalAdvance(" 100%")
-                        if hw_suffix_w:
-                            gpu_width += hw_suffix_w
-                        if monitor_vram and getattr(self.widget, 'vram_used', None) is not None:
-                            gpu_width += self.metrics.horizontalAdvance(" | 16.0/16.0G")
-                        calculated_width = max(calculated_width, gpu_width)
+                        if display_mode in ["gpu_only", "combined"]:
+                            gpu_width = label_offset + self.metrics.horizontalAdvance(" 100%")
+                            if hw_suffix_w:
+                                gpu_width += hw_suffix_w
+                            if monitor_vram and getattr(self.widget, 'vram_used', None) is not None:
+                                gpu_width += self.metrics.horizontalAdvance(" | 16.0/16.0G")
+                            calculated_width = max(calculated_width, gpu_width)
                 
                 
                 # Height is the TRUE visible taskbar height for horizontal docking (Fixes #104/PR #110)

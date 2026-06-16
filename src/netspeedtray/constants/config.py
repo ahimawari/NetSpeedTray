@@ -216,7 +216,7 @@ class ConfigConstants:
         "arrow_font_size": {"type": int, "default": DEFAULT_ARROW_FONT_SIZE, "min": fonts.FONT_SIZE_MIN, "max": fonts.FONT_SIZE_MAX},
         "arrow_font_weight": {"type": int, "default": DEFAULT_ARROW_FONT_WEIGHT, "min": 1, "max": 1000},
         "free_move": {"type": bool, "default": DEFAULT_FREE_MOVE},
-        "hardware_label_style": {"type": str, "default": DEFAULT_HARDWARE_LABEL_STYLE, "choices": ["icons_colored", "icons_monochrome", "text"]},
+        "hardware_label_style": {"type": str, "default": DEFAULT_HARDWARE_LABEL_STYLE, "choices": ["icons_colored", "icons_monochrome", "text", "stats_blocks"]},
         "keep_visible_fullscreen": {"type": bool, "default": DEFAULT_KEEP_VISIBLE_FULLSCREEN},
         "force_decimals": {"type": bool, "default": DEFAULT_FORCE_DECIMALS},
         "unit_type": {"type": str, "default": DEFAULT_UNIT_TYPE, "choices": ["bits_decimal", "bits_binary", "bytes_decimal", "bytes_binary"]},
