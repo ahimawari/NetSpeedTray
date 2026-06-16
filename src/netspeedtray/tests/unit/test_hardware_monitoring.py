@@ -52,6 +52,19 @@ class TestHardwareMonitoring:
 
         assert monitor_thread._read_lhm_bridge() == {}
 
+    @patch('subprocess.run')
+    def test_read_lhm_bridge_stale_requests_task_restart(self, mock_run, monitor_thread, tmp_path):
+        """Stale bridge data should trigger a best-effort scheduled task start."""
+        path = tmp_path / "lhm-readings.json"
+        path.write_text(json.dumps({"timestamp": time.time() - 60, "cpu_temp": 72.0}), encoding="utf-8")
+        monitor_thread._lhm_bridge_path = str(path)
+        monitor_thread._hardware_bridge_restart_interval = 0.0
+        mock_run.return_value.returncode = 0
+
+        assert monitor_thread._read_lhm_bridge() == {}
+        mock_run.assert_called_once()
+        assert "NetSpeedTray Hardware Bridge" in mock_run.call_args.args[0]
+
     # ------------------------------------------------------------------
     # GPU hybrid polling
     # ------------------------------------------------------------------
@@ -137,6 +150,29 @@ class TestHardwareMonitoring:
             assert result.temp == 64.0
             assert result.power == 22.5
             mock_sub.assert_not_called()
+
+    @patch('win32pdh.GetFormattedCounterValue')
+    @patch('win32pdh.CollectQueryData')
+    def test_poll_gpu_hybrid_smi_total_when_bridge_supplies_temp(self, mock_collect, mock_get_val, monitor_thread, tmp_path):
+        """VRAM total should still come from nvidia-smi when bridge already supplies GPU temp."""
+        monitor_thread._gpu_query = 123
+        monitor_thread._gpu_util_counters = [1]
+        monitor_thread._gpu_vram_counters = [2]
+        monitor_thread._nvidia_smi_path = "nvidia-smi"
+        monitor_thread._wmi_ohm = False
+        monitor_thread._lhm_bridge_path = self.write_lhm_bridge(tmp_path, gpu_temp=64.0)
+
+        mock_get_val.side_effect = [(None, 45.0), (None, 1073741824.0)]
+
+        with patch('subprocess.check_output') as mock_sub:
+            mock_sub.return_value = "52, 8192, 75.3\n"
+            result = monitor_thread._poll_gpu_hybrid(include_temp=True, include_power=False)
+
+            assert result.temp == 64.0
+            assert result.vram_used == 1024.0
+            assert result.vram_total == 8192.0
+            assert monitor_thread._gpu_vram_total_cache_mib == 8192.0
+            mock_sub.assert_called_once()
 
     @patch('win32pdh.GetFormattedCounterValue')
     @patch('win32pdh.CollectQueryData')

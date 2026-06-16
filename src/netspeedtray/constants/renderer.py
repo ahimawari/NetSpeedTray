@@ -21,7 +21,7 @@ class RendererConstants:
 
     # --- Pixel HUD compact block style ---
     PIXEL_HUD_LABEL_WIDTH: Final[int] = 8
-    PIXEL_HUD_GRAPH_WIDTH: Final[int] = 36
+    PIXEL_HUD_GRAPH_WIDTH: Final[int] = 44
     PIXEL_HUD_NETWORK_GRAPH_WIDTH: Final[int] = 60
     PIXEL_HUD_GAP: Final[int] = 4
     PIXEL_HUD_INNER_GAP: Final[int] = 2

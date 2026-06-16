@@ -278,7 +278,7 @@ internal static class NetSpeedTrayLhmBridge
             var parts = new List<string>
             {
                 "\"version\":1",
-                "\"source\":\"LibreHardwareMonitorLib\"",
+                "\"source\":\"NetSpeedTrayHardwareBridge\"",
                 "\"timestamp\":" + UnixTimestamp().ToString("0.###", CultureInfo.InvariantCulture),
                 "\"updated_utc\":\"" + DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture) + "\""
             };

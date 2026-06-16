@@ -23,7 +23,7 @@ winget install --id erez-c137.NetSpeedTray
 
 Or grab the latest [**Setup.exe** or **Portable.zip**](https://github.com/erez-c137/NetSpeedTray/releases/latest) directly. Both are digitally signed — no SmartScreen warnings.
 
-**Requirements:** Windows 10 or 11 (64-bit). No admin needed for the widget itself; LibreHardwareMonitor (optional, for CPU/GPU temperatures) does require admin.
+**Requirements:** Windows 10 or 11 (64-bit). No admin needed for the widget itself; the installer configures an elevated NetSpeedTray hardware bridge for CPU/GPU temperatures when needed.
 
 ---
 
@@ -60,7 +60,7 @@ So I built NetSpeedTray: live up/down speeds, CPU and GPU utilization, temperatu
 
 🌐 **Network on Your Taskbar.** Live upload and download speeds with sub-second updates. Auto-detects your primary internet connection or lets you pick specific adapters. Color-coded thresholds so heavy traffic stands out at a glance.
 
-🖥️ **Hardware Stats Too.** CPU and GPU utilization right next to network speeds. Optional temperature and power readings (Watts) for both. Vendor-agnostic GPU support — works with NVIDIA, AMD, and Intel via Windows Performance Counters. Temperatures via [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (auto-detected), nvidia-smi, or ACPI fallback.
+🖥️ **Hardware Stats Too.** CPU and GPU utilization right next to network speeds. Optional temperature and power readings (Watts) for both. Vendor-agnostic GPU support — works with NVIDIA, AMD, and Intel via Windows Performance Counters. Temperatures via the NetSpeedTray hardware bridge, nvidia-smi, legacy LHM/OHM auto-detection, or ACPI fallback.
 
 📊 **History Graphs.** Dual-axis area charts for download and upload. Dedicated CPU and GPU history tabs. Overview tab with synchronized charts. Three-tier retention: per-second for 24h, per-minute for 30 days, hourly up to a year. Export to CSV or save as PNG.
 
@@ -78,7 +78,7 @@ So I built NetSpeedTray: live up/down speeds, CPU and GPU utilization, temperatu
 2. **Right-click the widget** on your taskbar — opens Settings, Graph, App Activity, or Exit
 3. **Double-click the widget** to open the full history graph
 
-Want CPU/GPU temperatures? Install [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) and run it as Administrator — NetSpeedTray detects it automatically. NVIDIA GPU temps also work natively via `nvidia-smi`.
+Want CPU/GPU temperatures? Use the installer so NetSpeedTray can configure its bundled hardware bridge. Portable builds can still read an already-running LibreHardwareMonitor/OpenHardwareMonitor instance, and NVIDIA GPU temps also work natively via `nvidia-smi`.
 
 ---
 
@@ -90,8 +90,8 @@ Task Manager shows network speed too — but you have to *open* it to see anythi
 **Will it slow down my PC?**
 As of v1.3.2, idle RAM is roughly 40–75 MB depending on hardware (Python + Qt overhead), and CPU usage is near zero between polls. matplotlib and numpy only load when you actually open the graph window. The widget polls network counters every ~1 second using the same Windows APIs that Task Manager uses.
 
-**Why do I need LibreHardwareMonitor for CPU/GPU temperatures?**
-Reading hardware temperatures on modern CPUs/GPUs requires a kernel-level driver that Windows doesn't expose to regular apps. LHM installs that driver and publishes temperatures via WMI, which NetSpeedTray then reads. NVIDIA GPU temps work natively via `nvidia-smi` without LHM. The widget itself never asks for admin — only LHM does.
+**Why does temperature reading need an elevated bridge?**
+Reading hardware temperatures on modern CPUs/GPUs requires a kernel-level sensor driver that Windows doesn't expose to regular apps. The NetSpeedTray installer configures a small bundled hardware bridge to read those sensors with elevated permissions and write sanitized readings for the widget. NVIDIA GPU temps work natively via `nvidia-smi` without the bridge.
 
 **Does it work on Windows 7 or 8?**
 Officially supported on Windows 10 and 11 (64-bit). The taskbar APIs the widget uses changed enough between Win8 and Win10 that older versions aren't tested. It might work; it's not supported.
@@ -118,11 +118,11 @@ You probably downloaded an unsigned dev build, or grabbed a release before signi
 ### Hardware Monitoring
 
 -   **CPU & GPU Utilization** displayed alongside network speeds on the taskbar
--   **Temperature Readouts** for CPU and GPU (via LibreHardwareMonitor, nvidia-smi, or Windows PDH/ACPI)
--   **Power Draw** in Watts for CPU (Intel RAPL) and GPU (nvidia-smi / LHM)
+-   **Temperature Readouts** for CPU and GPU (via the NetSpeedTray hardware bridge, nvidia-smi, legacy LHM/OHM, or Windows PDH/ACPI)
+-   **Power Draw** in Watts for CPU (Intel RAPL / hardware bridge) and GPU (nvidia-smi / hardware bridge / LHM/OHM)
 -   **RAM & VRAM** usage readouts
 -   **Vendor-Agnostic GPU Support** via Windows Performance Counters (PDH) — works with NVIDIA, AMD, and Intel GPUs
--   **LibreHardwareMonitor Auto-Detection:** If LHM/OHM is running, NetSpeedTray picks it up automatically for temperature and power readings across all GPU vendors
+-   **Bundled Hardware Bridge:** Installer builds include NetSpeedTray's own sensor bridge; legacy LHM/OHM auto-detection remains available for portable or advanced setups
 
 ### Widget Layout Modes
 
@@ -328,7 +328,7 @@ This means every release of NetSpeedTray you download from this repository is di
 ## Thanks
 
 -   **Translations** by the community — see [Translators](#translators) above.
--   **Built on** [PyQt6](https://www.riverbankcomputing.com/software/pyqt/), [matplotlib](https://matplotlib.org/), [psutil](https://github.com/giampaolo/psutil), [numpy](https://numpy.org/), [pywin32](https://github.com/mhammond/pywin32), [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (when available), and [Inno Setup](https://jrsoftware.org/isinfo.php).
+-   **Built on** [PyQt6](https://www.riverbankcomputing.com/software/pyqt/), [matplotlib](https://matplotlib.org/), [psutil](https://github.com/giampaolo/psutil), [numpy](https://numpy.org/), [pywin32](https://github.com/mhammond/pywin32), [LibreHardwareMonitorLib](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor), and [Inno Setup](https://jrsoftware.org/isinfo.php).
 
 ---
 

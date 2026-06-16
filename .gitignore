@@ -13,6 +13,9 @@ dist/
 # Local build tools auto-downloaded by build.bat (e.g. UPX). Kept out of git
 # because they're platform binaries — see build.bat for fetch logic.
 /build/tools/
+/build/lhm_bridge_publish/
+tools/lhm_bridge/bin/
+tools/lhm_bridge/obj/
 
 # Virtual Environments
 .venv/

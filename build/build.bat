@@ -33,6 +33,8 @@ echo Detected Version: %VERSION%
 set "CODENAME=%ROOT_DIR%\src\monitor.py"
 set "DIST_DIR=%ROOT_DIR%\dist"
 set "INSTALLER_DIR=%BUILD_DIR%installer"
+set "BRIDGE_PROJECT=%ROOT_DIR%\tools\lhm_bridge\NetSpeedTrayLhmBridge.csproj"
+set "BRIDGE_PUBLISH_DIR=%BUILD_DIR%lhm_bridge_publish"
 set "LOG_FILE=%BUILD_DIR%build_log.txt"
 
 :: --- Main Script Logic ---
@@ -46,6 +48,7 @@ echo Cleaning up previous build artifacts...
 if exist "%DIST_DIR%" rmdir /s /q "%DIST_DIR%" 2>nul
 if exist "%BUILD_DIR%build" rmdir /s /q "%BUILD_DIR%build" 2>nul
 if exist "%INSTALLER_DIR%" rmdir /s /q "%INSTALLER_DIR%" 2>nul
+if exist "%BRIDGE_PUBLISH_DIR%" rmdir /s /q "%BRIDGE_PUBLISH_DIR%" 2>nul
 
 :: Stage 2: Verify Dependencies
 echo.
@@ -56,12 +59,26 @@ if not exist "%CODENAME%" (echo ERROR: monitor.py missing & exit /b 1)
 if not exist "%ROOT_DIR%\assets\NetSpeedTray.ico" (echo ERROR: NetSpeedTray.ico missing & exit /b 1)
 if not exist "%BUILD_DIR%NetSpeedTray.spec" (echo ERROR: netspeedtray.spec missing & exit /b 1)
 if not exist "%BUILD_DIR%setup.iss" (echo ERROR: setup.iss missing & exit /b 1)
+if not exist "%BRIDGE_PROJECT%" (echo ERROR: NetSpeedTray hardware bridge project missing & exit /b 1)
 if not exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (echo ERROR: Inno Setup 6 not installed & exit /b 1)
+where dotnet >nul 2>nul
+if errorlevel 1 (echo ERROR: .NET SDK missing; required to build the hardware bridge & exit /b 1)
 call "%ROOT_DIR%\.venv\Scripts\activate.bat" 2>nul
 "%ROOT_DIR%\.venv\Scripts\python.exe" -c "import PyQt6, psutil, win32api, matplotlib, numpy, signal" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (echo ERROR: Required Python packages missing & exit /b 1)
 set "end_time=%TIME%"
 call :log_elapsed "Verifying dependencies" "%start_time%" "%end_time%"
+
+:: Stage 2b: Publish Hardware Bridge
+echo.
+echo Publishing hardware bridge...
+echo Publishing hardware bridge... >> "%LOG_FILE%"
+set "start_time=%TIME%"
+dotnet publish "%BRIDGE_PROJECT%" -c Release -r win-x64 --self-contained true -o "%BRIDGE_PUBLISH_DIR%" >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (echo ERROR: Hardware bridge publish failed. Check %LOG_FILE% & exit /b 1)
+if not exist "%BRIDGE_PUBLISH_DIR%\NetSpeedTrayLhmBridge.exe" (echo ERROR: Hardware bridge executable missing after publish & exit /b 1)
+set "end_time=%TIME%"
+call :log_elapsed "Publishing hardware bridge" "%start_time%" "%end_time%"
 
 :: Stage 3: Compile Executable
 echo.
@@ -85,6 +102,13 @@ set "UPX_DIR_ARG="
 if exist "%BUILD_DIR%tools\upx-5.0.2-win64\upx.exe" set "UPX_DIR_ARG=--upx-dir %BUILD_DIR%tools\upx-5.0.2-win64"
 
 pyinstaller --noconfirm --distpath "%DIST_DIR%" %UPX_DIR_ARG% NetSpeedTray.spec >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (echo ERROR: PyInstaller compilation failed. Check %LOG_FILE% & exit /b 1)
+if not exist "%DIST_DIR%\NetSpeedTray\NetSpeedTray.exe" (echo ERROR: Executable not found after compilation & exit /b 1)
+
+echo Copying hardware bridge into app bundle...
+mkdir "%DIST_DIR%\NetSpeedTray\hardware-monitor" 2>nul
+xcopy "%BRIDGE_PUBLISH_DIR%\*" "%DIST_DIR%\NetSpeedTray\hardware-monitor\" /E /I /Y >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (echo ERROR: Failed to copy hardware bridge into app bundle & exit /b 1)
 
 :: Stage 4: Generate Installer
 echo.
@@ -154,6 +178,7 @@ if exist "%DIST_DIR%\NetSpeedTray" rmdir /s /q "%DIST_DIR%\NetSpeedTray" 2>nul
 echo Removing leftover EXE from dist folder (if any)...
 if exist "%DIST_DIR%\NetSpeedTray.exe" del /f /q "%DIST_DIR%\NetSpeedTray.exe" 2>nul
 if exist "%INSTALLER_DIR%" rmdir /s /q "%INSTALLER_DIR%" 2>nul
+if exist "%BRIDGE_PUBLISH_DIR%" rmdir /s /q "%BRIDGE_PUBLISH_DIR%" 2>nul
 if exist "%ROOT_DIR%\src\__pycache__" rmdir /s /q "%ROOT_DIR%\src\__pycache__" 2>nul
 for /r "%ROOT_DIR%\src\netspeedtray" %%i in (__pycache__) do if exist "%%i" rmdir /s /q "%%i" 2>nul
 for /r "%ROOT_DIR%\src" %%i in (*.pyc) do if exist "%%i" del /f /q "%%i" 2>nul

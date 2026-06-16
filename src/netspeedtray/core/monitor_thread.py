@@ -91,6 +91,14 @@ class StatsMonitorThread(QThread):
         self._lhm_bridge_logged_available: bool = False
         self._lhm_bridge_logged_unavailable: bool = False
         self._lhm_bridge_logged_stale: bool = False
+        self._hardware_bridge_restart_last_attempt: float = 0.0
+        self._hardware_bridge_restart_interval: float = 30.0
+        self._hardware_bridge_task_names: Tuple[str, ...] = (
+            "NetSpeedTray Hardware Bridge",
+            "NetSpeedTray LibreHardwareMonitor Bridge",
+        )
+        self._gpu_vram_total_cache_mib: Optional[float] = None
+        self._gpu_vram_total_wmi_checked: bool = False
 
         # PDH Queries for GPU
         self._gpu_query: Optional[int] = None
@@ -181,6 +189,8 @@ class StatsMonitorThread(QThread):
             self._gpu_query = None
             self._gpu_util_counters = []
             self._gpu_vram_counters = []
+            self._gpu_vram_total_cache_mib = None
+            self._gpu_vram_total_wmi_checked = False
 
     def _poll_gpu_hybrid(self, include_temp: bool = True, include_power: bool = False) -> GpuPollResult:
         """
@@ -195,7 +205,7 @@ class StatsMonitorThread(QThread):
 
         util_pct = 0.0
         vram_used = 0.0
-        vram_total = None
+        vram_total = self._gpu_vram_total_cache_mib
         temp_c = None
         power_w = None
 
@@ -283,8 +293,10 @@ class StatsMonitorThread(QThread):
                     except Exception as e:
                         self.logger.debug("LHM/OHM GPU power error: %s", e)
 
-        # 4. nvidia-smi fallback for temp/power (vram_total comes as bonus)
-        if self._nvidia_smi_path and (need_smi_temp or need_smi_power):
+        need_smi_total = bool(self._gpu_vram_counters) and vram_total is None
+
+        # 4. nvidia-smi fallback for temp/power, and for VRAM total when PDH only gives usage.
+        if self._nvidia_smi_path and (need_smi_temp or need_smi_power or need_smi_total):
             try:
                 query_fields = "temperature.gpu,memory.total,power.draw"
                 output = subprocess.check_output(
@@ -297,7 +309,11 @@ class StatsMonitorThread(QThread):
                     try: temp_c = float(parts[0].strip())
                     except: pass
                 if len(parts) > 1:
-                    try: vram_total = float(parts[1].strip())  # MiB
+                    try:
+                        total = float(parts[1].strip())  # MiB
+                        if total > 0:
+                            vram_total = total
+                            self._gpu_vram_total_cache_mib = total
                     except: pass
                 if need_smi_power and len(parts) > 2:
                     try:
@@ -306,6 +322,9 @@ class StatsMonitorThread(QThread):
                             power_w = pw
                     except: pass
             except: pass
+
+        if vram_total is None and self._gpu_vram_counters:
+            vram_total = self._poll_vram_total_wmi(vram_used)
 
         # 5. RAPL PP1 fallback for Intel iGPU power (if no LHM/nvidia-smi power)
         if include_power and power_w is None and self._power_pp1_counter is not None:
@@ -319,6 +338,43 @@ class StatsMonitorThread(QThread):
             except: pass
 
         return GpuPollResult(util_pct, vram_used, vram_total, temp_c, power_w)
+
+    def _poll_vram_total_wmi(self, used_mib: float = 0.0) -> Optional[float]:
+        """Best-effort VRAM total fallback from Win32_VideoController."""
+        if self._gpu_vram_total_wmi_checked or not win32com.client:
+            return self._gpu_vram_total_cache_mib
+
+        self._gpu_vram_total_wmi_checked = True
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+            wmi_obj = win32com.client.GetObject("winmgmts:root\\cimv2")
+            totals: List[float] = []
+            for adapter in wmi_obj.ExecQuery("SELECT AdapterRAM, PNPDeviceID FROM Win32_VideoController"):
+                raw = getattr(adapter, "AdapterRAM", None)
+                pnp_id = str(getattr(adapter, "PNPDeviceID", "") or "").upper()
+                if raw is None or pnp_id.startswith("ROOT\\DISPLAY") or "VIRTUAL" in pnp_id:
+                    continue
+                try:
+                    total_mib = float(raw) / (1024.0 * 1024.0)
+                except (TypeError, ValueError):
+                    continue
+                if total_mib >= 128.0:
+                    totals.append(total_mib)
+
+            if not totals:
+                return None
+
+            total = max(totals)
+            if used_mib > 0.0 and total < used_mib * 0.85:
+                self.logger.debug("Ignoring WMI VRAM total %.0f MiB below current usage %.0f MiB.", total, used_mib)
+                return None
+
+            self._gpu_vram_total_cache_mib = total
+            return total
+        except Exception as e:
+            self.logger.debug("WMI VRAM total fallback error: %s", e)
+            return None
 
     @lru_cache(maxsize=4)
     def _get_cached_path(self, binary: str) -> Optional[str]:
@@ -521,6 +577,7 @@ class StatsMonitorThread(QThread):
                 if not self._lhm_bridge_logged_stale:
                     self._lhm_bridge_logged_stale = True
                     self.logger.info("LibreHardwareMonitor bridge readings are stale or missing timestamps.")
+                self._request_hardware_bridge_start()
                 self._lhm_bridge_cache = readings
                 self._lhm_bridge_cache_time = now
                 return readings
@@ -548,12 +605,36 @@ class StatsMonitorThread(QThread):
             if not self._lhm_bridge_logged_unavailable:
                 self._lhm_bridge_logged_unavailable = True
                 self.logger.debug("LibreHardwareMonitor bridge file not found: %s", self._lhm_bridge_path)
+            self._request_hardware_bridge_start()
         except Exception as e:
             self.logger.debug("LibreHardwareMonitor bridge read error: %s", e)
 
         self._lhm_bridge_cache = readings
         self._lhm_bridge_cache_time = now
         return readings
+
+    def _request_hardware_bridge_start(self) -> None:
+        """Ask Windows Task Scheduler to start the bundled elevated hardware bridge."""
+        now = time.monotonic()
+        if now - self._hardware_bridge_restart_last_attempt < self._hardware_bridge_restart_interval:
+            return
+        self._hardware_bridge_restart_last_attempt = now
+
+        for task_name in self._hardware_bridge_task_names:
+            try:
+                result = subprocess.run(
+                    ["schtasks.exe", "/Run", "/TN", task_name],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2.0,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    self.logger.info("Requested hardware bridge scheduled task start: %s", task_name)
+                    return
+            except Exception as e:
+                self.logger.debug("Hardware bridge task start failed for %s: %s", task_name, e)
 
     def _init_ohm_wmi(self) -> None:
         """

@@ -6,6 +6,8 @@
 #define MyAppExeName "NetSpeedTray.exe"
 #define MyAppMutex "Global\NetSpeedTray_Single_Instance_Mutex"
 #define MyAppId "{{D3A32B89-C533-4F2C-9F87-23B2395B5B89}}"
+#define HardwareBridgeTaskName "NetSpeedTray Hardware Bridge"
+#define LegacyHardwareBridgeTaskName "NetSpeedTray LibreHardwareMonitor Bridge"
 
 ; --- DYNAMIC VERSIONING ---
 ; If AppVersion is NOT defined (e.g., manual compile without build.bat), use a default.
@@ -61,7 +63,11 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$ErrorActionPreference='SilentlyContinue'; Stop-ScheduledTask -TaskName '{#LegacyHardwareBridgeTaskName}'; Unregister-ScheduledTask -TaskName '{#LegacyHardwareBridgeTaskName}' -Confirm:$false; Stop-ScheduledTask -TaskName '{#HardwareBridgeTaskName}'; Unregister-ScheduledTask -TaskName '{#HardwareBridgeTaskName}' -Confirm:$false; $a=New-ScheduledTaskAction -Execute '{app}\hardware-monitor\NetSpeedTrayLhmBridge.exe' -Argument '--output ""{commonappdata}\NetSpeedTray\lhm-readings.json"" --interval-ms 2000' -WorkingDirectory '{app}\hardware-monitor'; $t=New-ScheduledTaskTrigger -AtLogOn; Register-ScheduledTask -TaskName '{#HardwareBridgeTaskName}' -Action $a -Trigger $t -RunLevel Highest -Force | Out-Null; Start-ScheduledTask -TaskName '{#HardwareBridgeTaskName}'"""; Flags: runhidden waituntilterminated; StatusMsg: "Installing NetSpeedTray hardware bridge..."; Check: FileExists(ExpandConstant('{app}\hardware-monitor\NetSpeedTrayLhmBridge.exe'))
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$ErrorActionPreference='SilentlyContinue'; Stop-ScheduledTask -TaskName '{#HardwareBridgeTaskName}'; Unregister-ScheduledTask -TaskName '{#HardwareBridgeTaskName}' -Confirm:$false"""; Flags: runhidden waituntilterminated
 
 [UninstallDelete]
 Type: files; Name: "{autodesktop}\{#MyAppName}.lnk"

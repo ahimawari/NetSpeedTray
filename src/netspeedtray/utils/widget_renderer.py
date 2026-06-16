@@ -1172,7 +1172,7 @@ class WidgetRenderer:
         text = str(value_text).strip() or "--"
         painter.save()
         try:
-            scale = max(1, min(2, rect.height() // 7))
+            scale = 2 if rect.height() >= 11 else 1
             digit_w = 3 * scale
             digit_h = 5 * scale
             gap = max(1, scale)
@@ -1185,7 +1185,7 @@ class WidgetRenderer:
                 total_w = (digit_w * len(text)) + (gap * max(0, len(text) - 1))
 
             pad_x = 2
-            pad_y = 1 if rect.height() <= 8 else 2
+            pad_y = 1
 
             backing = QRect(
                 rect.left() + int((rect.width() - total_w - (pad_x * 2)) / 2),
