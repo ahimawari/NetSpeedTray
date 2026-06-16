@@ -63,7 +63,7 @@ class TestInputHandler(unittest.TestCase):
         self.mock_widget.move = MagicMock()
         self.mock_widget.update_config = MagicMock()
         self.mock_widget.open_graph_window = MagicMock()
-        self.mock_widget.show_all_hardware_details = MagicMock()
+        self.mock_widget.show_hardware_detail_overview = MagicMock()
         self.mock_widget.schedule_click_detail = MagicMock()
         # Set geometry so pos() returns something
         self.mock_widget.setGeometry(100, 100, 200, 50)
@@ -159,10 +159,11 @@ class TestInputHandler(unittest.TestCase):
 
         self.mock_widget.schedule_click_detail.assert_not_called()
         self.mock_widget.open_graph_window.assert_not_called()
+        self.mock_widget.show_hardware_detail_overview.assert_not_called()
         event.accept.assert_called_once()
 
-    def test_second_click_release_opens_graph(self):
-        """Test manual double-click release opens the graph window."""
+    def test_second_click_release_shows_hardware_details(self):
+        """Test manual double-click release shows hardware details."""
         first_event = self._create_mouse_event(
             button=Qt.MouseButton.LeftButton,
             global_x=150,
@@ -181,30 +182,33 @@ class TestInputHandler(unittest.TestCase):
             self.handler.handle_mouse_release(first_event)
             self.handler.handle_mouse_release(second_event)
 
-        self.mock_widget.open_graph_window.assert_called_once()
+        self.mock_widget.show_hardware_detail_overview.assert_called_once()
+        args, _ = self.mock_widget.show_hardware_detail_overview.call_args
+        self.assertEqual(args[0], QPoint(151, 151))
+        self.mock_widget.open_graph_window.assert_not_called()
         first_event.accept.assert_called_once()
         second_event.accept.assert_called_once()
 
-    def test_double_click_opens_graph_not_detail(self):
-        """Test Double Click opens the graph window, not a detail popup."""
+    def test_double_click_shows_hardware_details_not_graph(self):
+        """Test Double Click shows hardware details, not the graph window."""
         event = self._create_mouse_event(button=Qt.MouseButton.LeftButton)
         
         self.handler.handle_double_click(event)
         
-        self.mock_widget.show_all_hardware_details.assert_not_called()
-        self.mock_widget.open_graph_window.assert_called_once()
+        self.mock_widget.show_hardware_detail_overview.assert_called_once()
+        self.mock_widget.open_graph_window.assert_not_called()
         event.accept.assert_called_once()
 
-    def test_graph_open_is_debounced(self):
-        """Test duplicate double-click paths only open the graph once."""
+    def test_hardware_detail_open_is_debounced(self):
+        """Test duplicate double-click paths only show details once."""
         with patch(
             "netspeedtray.core.input_handler.time.monotonic",
             side_effect=[10.0, 10.1],
         ):
-            self.handler.open_graph_window_once()
-            self.handler.open_graph_window_once()
+            self.handler.show_hardware_details_once(QPoint(1, 1))
+            self.handler.show_hardware_details_once(QPoint(2, 2))
 
-        self.mock_widget.open_graph_window.assert_called_once()
+        self.mock_widget.show_hardware_detail_overview.assert_called_once_with(QPoint(1, 1))
 
 if __name__ == '__main__':
     unittest.main()

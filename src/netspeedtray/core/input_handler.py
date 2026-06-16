@@ -5,7 +5,7 @@ This module encapsulates all mouse and keyboard interaction logic, separating it
 from the main widget processing. It handles:
 1. Dragging operations (start, move, end).
 2. Context menu triggers.
-3. interactions (e.g., Double-Click to open Graph).
+3. interactions (e.g., Double-Click to open hardware details).
 """
 
 import logging
@@ -41,7 +41,7 @@ class InputHandler(QObject):
         self._is_dragging: bool = False
         self._last_click_time_ms: float = 0.0
         self._last_click_pos: Optional[QPoint] = None
-        self._last_graph_open_time_ms: float = 0.0
+        self._last_detail_open_time_ms: float = 0.0
 
     def handle_mouse_press(self, event: QMouseEvent) -> None:
         """Handles mouse press start."""
@@ -97,14 +97,14 @@ class InputHandler(QObject):
             event.accept()
 
     def handle_double_click(self, event: QMouseEvent) -> None:
-        """Handles double-click (Open Graph)."""
+        """Handles double-click (show hardware details)."""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.logger.debug("Double-click detected. Opening Graph Window.")
-            self.open_graph_window_once()
+            self.logger.debug("Double-click detected. Showing hardware details.")
+            self.show_hardware_details_once(event.globalPosition().toPoint())
             event.accept()
 
     def _handle_click_release(self, global_pos: QPoint) -> None:
-        """Open the graph for reliable non-drag double-click releases."""
+        """Show hardware details for reliable non-drag double-click releases."""
         now_ms = time.monotonic() * 1000.0
         max_interval = QApplication.doubleClickInterval()
         max_distance = QApplication.startDragDistance()
@@ -116,24 +116,24 @@ class InputHandler(QObject):
         )
 
         if is_double_click:
-            self.logger.debug("Double-click release detected. Opening Graph Window.")
+            self.logger.debug("Double-click release detected. Showing hardware details.")
             self._last_click_time_ms = 0.0
             self._last_click_pos = None
-            self.open_graph_window_once()
+            self.show_hardware_details_once(global_pos)
             return
 
         self._last_click_time_ms = now_ms
         self._last_click_pos = QPoint(global_pos)
 
-    def open_graph_window_once(self) -> None:
-        """Debounce graph opening when Qt and manual double-click paths both fire."""
+    def show_hardware_details_once(self, global_pos: Optional[QPoint] = None) -> None:
+        """Debounce hardware details when Qt and manual double-click paths both fire."""
         now_ms = time.monotonic() * 1000.0
-        if now_ms - self._last_graph_open_time_ms < 500.0:
+        if now_ms - self._last_detail_open_time_ms < 500.0:
             return
 
-        self._last_graph_open_time_ms = now_ms
-        if hasattr(self.widget, 'open_graph_window'):
-            self.widget.open_graph_window()
+        self._last_detail_open_time_ms = now_ms
+        if hasattr(self.widget, 'show_hardware_detail_overview'):
+            self.widget.show_hardware_detail_overview(global_pos)
 
     def handle_leave(self) -> None:
         """Handles pointer leaving the widget."""
