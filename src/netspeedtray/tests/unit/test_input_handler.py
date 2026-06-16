@@ -158,7 +158,32 @@ class TestInputHandler(unittest.TestCase):
         self.handler.handle_mouse_release(event)
 
         self.mock_widget.schedule_click_detail.assert_not_called()
+        self.mock_widget.open_graph_window.assert_not_called()
         event.accept.assert_called_once()
+
+    def test_second_click_release_opens_graph(self):
+        """Test manual double-click release opens the graph window."""
+        first_event = self._create_mouse_event(
+            button=Qt.MouseButton.LeftButton,
+            global_x=150,
+            global_y=150,
+        )
+        second_event = self._create_mouse_event(
+            button=Qt.MouseButton.LeftButton,
+            global_x=151,
+            global_y=151,
+        )
+
+        with patch(
+            "netspeedtray.core.input_handler.time.monotonic",
+            side_effect=[10.0, 10.2, 10.2],
+        ):
+            self.handler.handle_mouse_release(first_event)
+            self.handler.handle_mouse_release(second_event)
+
+        self.mock_widget.open_graph_window.assert_called_once()
+        first_event.accept.assert_called_once()
+        second_event.accept.assert_called_once()
 
     def test_double_click_opens_graph_not_detail(self):
         """Test Double Click opens the graph window, not a detail popup."""

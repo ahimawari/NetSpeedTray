@@ -9,6 +9,7 @@ from the main widget processing. It handles:
 """
 
 import logging
+import time
 from typing import Optional, TYPE_CHECKING
 from PyQt6.QtCore import QObject, QPoint, Qt
 from PyQt6.QtGui import QMouseEvent
@@ -38,6 +39,9 @@ class InputHandler(QObject):
         # State
         self._drag_start_pos: Optional[QPoint] = None
         self._is_dragging: bool = False
+        self._last_click_time_ms: float = 0.0
+        self._last_click_pos: Optional[QPoint] = None
+        self._last_graph_open_time_ms: float = 0.0
 
     def handle_mouse_press(self, event: QMouseEvent) -> None:
         """Handles mouse press start."""
@@ -85,6 +89,10 @@ class InputHandler(QObject):
                 self.widget._dragging = False
                 self._save_dragged_position()
                 self.logger.debug("Drag ended. Position saved: %s", self.widget.pos())
+                self._last_click_time_ms = 0.0
+                self._last_click_pos = None
+            else:
+                self._handle_click_release(event.globalPosition().toPoint())
             self._drag_start_pos = None
             event.accept()
 
@@ -92,9 +100,40 @@ class InputHandler(QObject):
         """Handles double-click (Open Graph)."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.logger.debug("Double-click detected. Opening Graph Window.")
-            if hasattr(self.widget, 'open_graph_window'):
-                self.widget.open_graph_window()
+            self._open_graph_window_once()
             event.accept()
+
+    def _handle_click_release(self, global_pos: QPoint) -> None:
+        """Open the graph for reliable non-drag double-click releases."""
+        now_ms = time.monotonic() * 1000.0
+        max_interval = QApplication.doubleClickInterval()
+        max_distance = QApplication.startDragDistance()
+
+        is_double_click = (
+            self._last_click_pos is not None
+            and now_ms - self._last_click_time_ms <= max_interval
+            and (global_pos - self._last_click_pos).manhattanLength() <= max_distance
+        )
+
+        if is_double_click:
+            self.logger.debug("Double-click release detected. Opening Graph Window.")
+            self._last_click_time_ms = 0.0
+            self._last_click_pos = None
+            self._open_graph_window_once()
+            return
+
+        self._last_click_time_ms = now_ms
+        self._last_click_pos = QPoint(global_pos)
+
+    def _open_graph_window_once(self) -> None:
+        """Debounce graph opening when Qt and manual double-click paths both fire."""
+        now_ms = time.monotonic() * 1000.0
+        if now_ms - self._last_graph_open_time_ms < 500.0:
+            return
+
+        self._last_graph_open_time_ms = now_ms
+        if hasattr(self.widget, 'open_graph_window'):
+            self.widget.open_graph_window()
 
     def handle_leave(self) -> None:
         """Handles pointer leaving the widget."""
