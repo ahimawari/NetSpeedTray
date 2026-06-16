@@ -25,13 +25,7 @@ internal static class NetSpeedTrayLhmBridge
         var computer = new Computer
         {
             IsCpuEnabled = true,
-            IsGpuEnabled = true,
-            IsMotherboardEnabled = true,
-            IsMemoryEnabled = true,
-            IsStorageEnabled = true,
-            IsControllerEnabled = true,
-            IsPsuEnabled = true,
-            IsBatteryEnabled = true
+            IsGpuEnabled = true
         };
 
         try

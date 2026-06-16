@@ -50,7 +50,9 @@ class TestHardwareMonitoring:
         path.write_text(json.dumps({"timestamp": time.time() - 60, "cpu_temp": 72.0}), encoding="utf-8")
         monitor_thread._lhm_bridge_path = str(path)
 
-        assert monitor_thread._read_lhm_bridge() == {}
+        with patch.object(monitor_thread, '_request_hardware_bridge_start') as mock_restart:
+            assert monitor_thread._read_lhm_bridge() == {}
+            mock_restart.assert_called_once()
 
     @patch('subprocess.run')
     def test_read_lhm_bridge_stale_requests_task_restart(self, mock_run, monitor_thread, tmp_path):
@@ -149,6 +151,32 @@ class TestHardwareMonitoring:
 
             assert result.temp == 64.0
             assert result.power == 22.5
+            mock_sub.assert_not_called()
+
+    @patch('win32pdh.GetFormattedCounterValue')
+    @patch('win32pdh.CollectQueryData')
+    def test_poll_gpu_hybrid_bridge_skips_ohm_probe(self, mock_collect, mock_get_val, monitor_thread, tmp_path):
+        """When bridge satisfies requested GPU sensors, avoid redundant OHM/LHM WMI probing."""
+        monitor_thread._gpu_query = 123
+        monitor_thread._gpu_util_counters = [1]
+        monitor_thread._gpu_vram_counters = []
+        monitor_thread._nvidia_smi_path = "nvidia-smi"
+        monitor_thread._wmi_ohm = None
+        monitor_thread._lhm_bridge_path = self.write_lhm_bridge(
+            tmp_path,
+            gpu_temp=64.0,
+            gpu_power=22.5,
+        )
+
+        mock_get_val.return_value = (None, 55.0)
+
+        with patch.object(monitor_thread, '_init_ohm_wmi') as mock_init_ohm, \
+             patch('subprocess.check_output') as mock_sub:
+            result = monitor_thread._poll_gpu_hybrid(include_temp=True, include_power=True)
+
+            assert result.temp == 64.0
+            assert result.power == 22.5
+            mock_init_ohm.assert_not_called()
             mock_sub.assert_not_called()
 
     @patch('win32pdh.GetFormattedCounterValue')

@@ -248,10 +248,15 @@ class StatsMonitorThread(QThread):
                     power_w = bridge_power
                     need_smi_power = False
 
-            self._init_ohm_wmi()
-            if self._wmi_ohm:
+            need_ohm_temp = include_temp and temp_c is None
+            need_ohm_power = include_power and power_w is None
+
+            if need_ohm_temp or need_ohm_power:
+                self._init_ohm_wmi()
+
+            if self._wmi_ohm and (need_ohm_temp or need_ohm_power):
                 # 3a. LHM/OHM GPU temperature
-                if include_temp:
+                if need_ohm_temp:
                     try:
                         sensors = self._wmi_ohm.ExecQuery(
                             "SELECT Value, Identifier, Name FROM Sensor WHERE SensorType='Temperature'"
@@ -274,7 +279,7 @@ class StatsMonitorThread(QThread):
                         self._wmi_ohm = None
 
                 # 3b. LHM/OHM GPU power (all vendors)
-                if include_power and self._wmi_ohm:
+                if need_ohm_power and self._wmi_ohm:
                     try:
                         sensors = self._wmi_ohm.ExecQuery(
                             "SELECT Value, Identifier, Name FROM Sensor WHERE SensorType='Power'"
