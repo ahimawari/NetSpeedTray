@@ -506,8 +506,8 @@ class NetworkSpeedWidget(QWidget):
         if self._detail_popup_sticky:
             return
 
-        module_key = self._module_key_at_point(local_pos)
-        if not module_key:
+        module_key, anchor = self._module_popup_target_at_point(local_pos, global_pos)
+        if not module_key or anchor is None:
             self.unsetCursor()
             self._hover_detail_timer.stop()
             self.hide_hover_detail()
@@ -520,13 +520,13 @@ class NetworkSpeedWidget(QWidget):
             return
 
         self._pending_hover_key = module_key
-        self._pending_hover_anchor = global_pos
+        self._pending_hover_anchor = anchor
         self._hover_detail_timer.start(260)
 
     def schedule_click_detail(self, local_pos: QPoint, global_pos: QPoint) -> None:
         """Schedules a single-click detail popup, delayed so double-click can cancel it."""
-        module_key = self._module_key_at_point(local_pos)
-        if not module_key:
+        module_key, anchor = self._module_popup_target_at_point(local_pos, global_pos)
+        if not module_key or anchor is None:
             self.hide_detail_popup(force=True)
             return
 
@@ -540,7 +540,7 @@ class NetworkSpeedWidget(QWidget):
             return
 
         self._pending_click_key = module_key
-        self._pending_click_anchor = global_pos
+        self._pending_click_anchor = anchor
         delay_ms = max(220, min(520, QApplication.doubleClickInterval() + 30))
         self._click_detail_timer.start(delay_ms)
 
@@ -579,10 +579,11 @@ class NetworkSpeedWidget(QWidget):
         if self._pending_click_key and self._pending_click_anchor:
             self._show_detail_popup(self._pending_click_key, self._pending_click_anchor, sticky=True)
 
-    def show_all_hardware_details(self, global_pos: QPoint) -> None:
+    def show_all_hardware_details(self, local_pos: QPoint, global_pos: Optional[QPoint] = None) -> None:
         """Shows the complete hardware detail popup."""
         self.cancel_pending_detail_popup()
-        self._show_detail_popup("overview", global_pos, sticky=True)
+        _, anchor = self._module_popup_target_at_point(local_pos, global_pos or local_pos)
+        self._show_detail_popup("overview", anchor or (global_pos or local_pos), sticky=True)
 
     def _show_detail_popup(self, module_key: str, anchor: QPoint, sticky: bool, keep_position: bool = False) -> None:
         if self.detail_popup is None:
@@ -614,10 +615,24 @@ class NetworkSpeedWidget(QWidget):
         )
 
     def _module_key_at_point(self, point: QPoint) -> Optional[str]:
+        hit = self._module_hit_at_point(point)
+        return hit[0] if hit else None
+
+    def _module_hit_at_point(self, point: QPoint) -> Optional[Tuple[str, QRect]]:
         for key, rect in reversed(self._module_hit_rects):
             if rect.contains(point):
-                return key
+                return key, rect
         return None
+
+    def _module_popup_target_at_point(self, local_pos: QPoint, fallback_global_pos: QPoint) -> Tuple[Optional[str], Optional[QPoint]]:
+        """Returns the hit module and a stable top-center popup anchor."""
+        hit = self._module_hit_at_point(local_pos)
+        if not hit:
+            return None, fallback_global_pos
+
+        key, rect = hit
+        anchor_local = QPoint(rect.center().x(), rect.top())
+        return key, self.mapToGlobal(anchor_local)
 
     def _reset_module_hit_rects(self) -> None:
         self._module_hit_rects = []

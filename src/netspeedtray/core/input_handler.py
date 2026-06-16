@@ -96,7 +96,7 @@ class InputHandler(QObject):
         if event.button() == Qt.MouseButton.LeftButton:
             self.logger.debug("Double-click detected. Showing hardware detail overview.")
             if hasattr(self.widget, 'show_all_hardware_details'):
-                self.widget.show_all_hardware_details(event.globalPosition().toPoint())
+                self.widget.show_all_hardware_details(event.position().toPoint(), event.globalPosition().toPoint())
             event.accept()
 
     def handle_leave(self) -> None:
