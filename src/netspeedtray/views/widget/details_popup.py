@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
-from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtCore import QPoint, QRect, Qt
 from PyQt6.QtGui import QColor, QGuiApplication
 from PyQt6.QtWidgets import (
     QFrame,
@@ -104,11 +104,14 @@ class ModuleDetailPopup(QWidget):
         self.adjustSize()
 
     def show_at(self, anchor: QPoint) -> None:
+        self.show_for_rect(QRect(anchor, anchor))
+
+    def show_for_rect(self, anchor_rect: QRect) -> None:
         self.adjustSize()
 
-        screen = QGuiApplication.screenAt(anchor) or QGuiApplication.primaryScreen()
+        screen = QGuiApplication.screenAt(anchor_rect.center()) or QGuiApplication.primaryScreen()
         if screen is None:
-            self.move(anchor)
+            self.move(anchor_rect.topLeft())
             self.show()
             self.raise_()
             return
@@ -118,12 +121,12 @@ class ModuleDetailPopup(QWidget):
         width = self.width()
         height = self.height()
 
-        x = anchor.x() - width // 2
+        x = anchor_rect.center().x() - width // 2
         x = max(geom.left() + margin, min(x, geom.right() - width - margin))
 
-        y = anchor.y() - height - 12
+        y = anchor_rect.top() - height - 8
         if y < geom.top() + margin:
-            y = anchor.y() + 12
+            y = anchor_rect.bottom() + 8
         y = max(geom.top() + margin, min(y, geom.bottom() - height - margin))
 
         self.move(x, y)
