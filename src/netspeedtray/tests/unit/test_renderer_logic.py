@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from netspeedtray.core.widget_state import AggregatedSpeedData
 from netspeedtray.utils.widget_renderer import WidgetRenderer
 from netspeedtray.views.graph.renderer import GraphRenderer
@@ -77,6 +78,46 @@ def test_network_pixel_hud_history_buckets_respect_swap_order():
     samples = WidgetRenderer._network_history_second_buckets(history, 1.0, 1.0, True, 4)
 
     assert samples == [(20.0, 10.0)]
+
+
+def test_pixel_hud_blocks_include_cpu_gpu_temperature_modules():
+    renderer = WidgetRenderer.__new__(WidgetRenderer)
+    config = SimpleNamespace(
+        show_hardware_temps=True,
+        monitor_ram_enabled=True,
+        monitor_vram_enabled=True,
+    )
+    enabled_stats = [
+        ("CPU", 23.0, 71.2, (18.5, 31.5), "#18E8FF", None),
+        ("GPU", 45.0, None, (2.0, 8.0), "#FF4FB3", None),
+    ]
+
+    blocks = renderer._build_pixel_hud_blocks(enabled_stats, config, {})
+    labels = [block["label"] for block in blocks]
+
+    assert labels == ["CPU", "CTP", "MEM", "GPU", "GTP", "VRM"]
+    assert blocks[1]["kind"] == "temp"
+    assert blocks[1]["available"] is True
+    assert blocks[1]["value"] == 71.2
+    assert blocks[4]["kind"] == "temp"
+    assert blocks[4]["available"] is False
+
+
+def test_pixel_hud_blocks_hide_temperature_modules_when_disabled():
+    renderer = WidgetRenderer.__new__(WidgetRenderer)
+    config = SimpleNamespace(
+        show_hardware_temps=False,
+        monitor_ram_enabled=False,
+        monitor_vram_enabled=False,
+    )
+    enabled_stats = [
+        ("CPU", 23.0, 71.2, None, "#18E8FF", None),
+        ("GPU", 45.0, 55.0, None, "#FF4FB3", None),
+    ]
+
+    blocks = renderer._build_pixel_hud_blocks(enabled_stats, config, {})
+
+    assert [block["label"] for block in blocks] == ["CPU", "GPU"]
 
 if __name__ == "__main__":
     test_peak_label_placement_logic()

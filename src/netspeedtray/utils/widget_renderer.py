@@ -845,18 +845,35 @@ class WidgetRenderer:
                                 config: RenderConfig, histories: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
         """Builds semantic compact blocks for utilization and memory-capacity metrics."""
         blocks: List[Dict[str, Any]] = []
+        show_temps = bool(getattr(config, "show_hardware_temps", False))
 
         for label, value, temp, mem_info, color_hex, _power in enabled_stats:
             metric = str(label).upper()
             blocks.append({
                 "label": metric,
                 "value": self._bounded_percent(value),
-                "temp": temp,
+                "temp": None,
                 "history": histories.get(metric, []),
                 "color": QColor(color_hex),
                 "kind": "line" if metric == "CPU" else "bars",
                 "available": True,
             })
+
+            if show_temps and metric in ("CPU", "GPU"):
+                temp_value = self._valid_temperature(temp)
+                blocks.append({
+                    "label": "CTP" if metric == "CPU" else "GTP",
+                    "value": temp_value if temp_value is not None else 0.0,
+                    "temp": None,
+                    "history": [],
+                    "color": QColor(
+                        constants.renderer.PIXEL_HUD_CPU_TEMP_COLOR
+                        if metric == "CPU"
+                        else constants.renderer.PIXEL_HUD_GPU_TEMP_COLOR
+                    ),
+                    "kind": "temp",
+                    "available": temp_value is not None,
+                })
 
             if metric == "CPU" and getattr(config, "monitor_ram_enabled", False):
                 mem_pct = self._memory_usage_percent(mem_info)
@@ -904,16 +921,21 @@ class WidgetRenderer:
 
         pct = self._bounded_percent(value)
         inner = graph_rect.adjusted(2, 2, -2, -2)
-        if kind == "capacity":
+        if kind == "temp":
+            self._draw_block_temperature(painter, inner, value, accent, available)
+            self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), value, available, clamp=False)
+        elif kind == "capacity":
             self._draw_block_capacity(painter, inner, pct, accent, available)
+            self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), pct, available)
         elif kind == "grid":
             self._draw_block_grid(painter, inner, pct, accent, available)
+            self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), pct, available)
         elif kind == "bars":
             self._draw_block_bars(painter, inner, history, pct, accent, available)
+            self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), pct, available)
         else:
             self._draw_block_sparkline(painter, inner, history, pct, accent, available)
-
-        self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), pct, available)
+            self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), pct, available)
 
         try:
             temp_ok = temp is not None and math.isfinite(float(temp))
@@ -1051,6 +1073,36 @@ class WidgetRenderer:
             x = gauge.left() + int(gauge.width() * i / 4)
             painter.fillRect(QRect(x, gauge.top(), 1, gauge.height()), tick)
 
+    def _draw_block_temperature(self, painter: QPainter, rect: QRect, current_value: float,
+                                color: QColor, available: bool) -> None:
+        """Draws a compact vertical thermometer-style gauge for CPU/GPU temperature."""
+        if rect.width() <= 1 or rect.height() <= 1:
+            return
+
+        track = QColor(color)
+        track.setAlpha(42 if available else 18)
+        painter.fillRect(rect, track)
+
+        band = QColor(255, 255, 255)
+        band.setAlpha(52 if available else 24)
+        for i in range(1, 4):
+            y = rect.top() + int(rect.height() * i / 4)
+            painter.fillRect(QRect(rect.left(), y, rect.width(), 1), band)
+
+        if not available:
+            return
+
+        temp_c = max(0.0, min(100.0, float(current_value)))
+        fill_h = max(1, int(rect.height() * temp_c / 100.0))
+        fill = QColor(color)
+        fill.setAlpha(245)
+        painter.fillRect(QRect(rect.left(), rect.bottom() - fill_h + 1, rect.width(), fill_h), fill)
+
+        hot_line = QColor(255, 255, 255)
+        hot_line.setAlpha(105)
+        y = rect.bottom() - fill_h + 1
+        painter.fillRect(QRect(rect.left(), y, rect.width(), 1), hot_line)
+
     def _draw_block_grid(self, painter: QPainter, rect: QRect, current_value: float,
                          color: QColor, available: bool) -> None:
         """Draws a tiled capacity grid for VRAM usage."""
@@ -1076,9 +1128,15 @@ class WidgetRenderer:
             cell_color.setAlpha(255 if idx < active else (42 if available else 16))
             painter.fillRect(cell, cell_color)
 
-    def _draw_block_value_text(self, painter: QPainter, rect: QRect, current_value: float, available: bool) -> None:
+    def _draw_block_value_text(self, painter: QPainter, rect: QRect, current_value: float,
+                               available: bool, clamp: bool = True) -> None:
         """Draws the compact numeric value inside a pixel HUD graph block."""
-        value_text = "--" if not available else f"{int(round(self._bounded_percent(current_value)))}"
+        if not available:
+            value_text = "--"
+        elif clamp:
+            value_text = f"{int(round(self._bounded_percent(current_value)))}"
+        else:
+            value_text = f"{int(round(float(current_value)))}"
         self._draw_pixel_value_badge(painter, rect, value_text, available)
 
     def _draw_pixel_value_badge(self, painter: QPainter, rect: QRect, value_text: str, available: bool) -> None:
@@ -1166,6 +1224,18 @@ class WidgetRenderer:
             if not math.isfinite(used_value) or not math.isfinite(total_value) or total_value <= 0:
                 return None
             return max(0.0, min(100.0, (used_value / total_value) * 100.0))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _valid_temperature(value: Optional[float]) -> Optional[float]:
+        try:
+            if value is None:
+                return None
+            temp = float(value)
+            if not math.isfinite(temp) or temp <= 0.0 or temp >= 150.0:
+                return None
+            return temp
         except Exception:
             return None
 

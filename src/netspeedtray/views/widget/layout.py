@@ -189,6 +189,7 @@ class WidgetLayoutManager:
                 display_mode = self.widget.config.get("widget_display_mode", "network_only")
                 monitor_ram = self.widget.config.get("monitor_ram_enabled", False)
                 monitor_vram = self.widget.config.get("monitor_vram_enabled", False)
+                show_temps = bool(self.widget.config.get("show_hardware_temps", False))
                 style = self.widget.config.get('hardware_label_style', 'icons_colored')
                 label_offset = self.metrics.horizontalAdvance("CPU ") if style == "text" else 14
                 pixel_hud_block_w = (
@@ -210,10 +211,14 @@ class WidgetLayoutManager:
                     count = 0
                     if include_cpu:
                         count += 1
+                        if show_temps:
+                            count += 1
                         if monitor_ram:
                             count += 1
                     if include_gpu:
                         count += 1
+                        if show_temps:
+                            count += 1
                         if monitor_vram:
                             count += 1
                     return count
@@ -243,7 +248,6 @@ class WidgetLayoutManager:
                         calculated_width_accum += calculated_width
                         
                     # Calculate Sub-Widths
-                    show_temps = bool(self.widget.config.get("show_hardware_temps", False))
                     show_power = bool(self.widget.config.get("show_hardware_power", False))
                     # Compute suffix width based on which extras are enabled
                     # Use 2-digit temp (99°C) and 3+1 power (250.0W) as realistic worst-case
