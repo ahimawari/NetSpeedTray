@@ -132,8 +132,8 @@ class InputHandler(QObject):
             return
 
         self._last_detail_open_time_ms = now_ms
-        if hasattr(self.widget, 'show_hardware_detail_overview'):
-            self.widget.show_hardware_detail_overview(global_pos)
+        if hasattr(self.widget, 'show_module_detail_for_point'):
+            self.widget.show_module_detail_for_point(global_pos)
 
     def handle_leave(self) -> None:
         """Handles pointer leaving the widget."""

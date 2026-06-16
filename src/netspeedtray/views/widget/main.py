@@ -559,19 +559,20 @@ class NetworkSpeedWidget(QWidget):
         if self._pending_hover_key and self._pending_hover_anchor:
             self._show_detail_popup(self._pending_hover_key, self._pending_hover_anchor, sticky=False)
 
-    def show_hardware_detail_overview(self, global_pos: Optional[QPoint] = None) -> None:
-        """Shows the full hardware detail popup anchored to the clicked module."""
+    def show_module_detail_for_point(self, global_pos: Optional[QPoint] = None) -> None:
+        """Shows detail popup for the clicked module, falling back to overview."""
         self.cancel_pending_detail_popup()
 
+        module_key = "overview"
         anchor = QRect(self.mapToGlobal(QPoint(0, 0)), self.size())
         if global_pos is not None:
             local_pos = self.mapFromGlobal(global_pos)
             hit = self._module_hit_at_point(local_pos)
             if hit:
-                _, rect = hit
+                module_key, rect = hit
                 anchor = QRect(self.mapToGlobal(rect.topLeft()), rect.size())
 
-        self._show_detail_popup("overview", anchor, sticky=True)
+        self._show_detail_popup(module_key, anchor, sticky=True)
 
     def _show_detail_popup(self, module_key: str, anchor: QRect, sticky: bool, keep_position: bool = False) -> None:
         if self.detail_popup is None:
@@ -1258,7 +1259,7 @@ class NetworkSpeedWidget(QWidget):
             if self.input_handler and hasattr(self.input_handler, "show_hardware_details_once"):
                 self.input_handler.show_hardware_details_once(pos)
             else:
-                self.show_hardware_detail_overview(pos)
+                self.show_module_detail_for_point(pos)
             return
 
         self._poll_last_click_time_ms = now_ms

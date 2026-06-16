@@ -63,7 +63,7 @@ class TestInputHandler(unittest.TestCase):
         self.mock_widget.move = MagicMock()
         self.mock_widget.update_config = MagicMock()
         self.mock_widget.open_graph_window = MagicMock()
-        self.mock_widget.show_hardware_detail_overview = MagicMock()
+        self.mock_widget.show_module_detail_for_point = MagicMock()
         self.mock_widget.schedule_click_detail = MagicMock()
         # Set geometry so pos() returns something
         self.mock_widget.setGeometry(100, 100, 200, 50)
@@ -159,7 +159,7 @@ class TestInputHandler(unittest.TestCase):
 
         self.mock_widget.schedule_click_detail.assert_not_called()
         self.mock_widget.open_graph_window.assert_not_called()
-        self.mock_widget.show_hardware_detail_overview.assert_not_called()
+        self.mock_widget.show_module_detail_for_point.assert_not_called()
         event.accept.assert_called_once()
 
     def test_second_click_release_shows_hardware_details(self):
@@ -182,8 +182,8 @@ class TestInputHandler(unittest.TestCase):
             self.handler.handle_mouse_release(first_event)
             self.handler.handle_mouse_release(second_event)
 
-        self.mock_widget.show_hardware_detail_overview.assert_called_once()
-        args, _ = self.mock_widget.show_hardware_detail_overview.call_args
+        self.mock_widget.show_module_detail_for_point.assert_called_once()
+        args, _ = self.mock_widget.show_module_detail_for_point.call_args
         self.assertEqual(args[0], QPoint(151, 151))
         self.mock_widget.open_graph_window.assert_not_called()
         first_event.accept.assert_called_once()
@@ -195,7 +195,7 @@ class TestInputHandler(unittest.TestCase):
         
         self.handler.handle_double_click(event)
         
-        self.mock_widget.show_hardware_detail_overview.assert_called_once()
+        self.mock_widget.show_module_detail_for_point.assert_called_once()
         self.mock_widget.open_graph_window.assert_not_called()
         event.accept.assert_called_once()
 
@@ -208,7 +208,7 @@ class TestInputHandler(unittest.TestCase):
             self.handler.show_hardware_details_once(QPoint(1, 1))
             self.handler.show_hardware_details_once(QPoint(2, 2))
 
-        self.mock_widget.show_hardware_detail_overview.assert_called_once_with(QPoint(1, 1))
+        self.mock_widget.show_module_detail_for_point.assert_called_once_with(QPoint(1, 1))
 
 if __name__ == '__main__':
     unittest.main()
