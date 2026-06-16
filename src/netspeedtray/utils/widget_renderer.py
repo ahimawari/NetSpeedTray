@@ -239,7 +239,10 @@ class WidgetRenderer:
             
         painter.fillRect(rect, self._cached_bg_color)
 
-    def draw_network_speeds(self, painter: QPainter, upload: float, download: float, width: int, height: int, config: RenderConfig, layout_mode: str = 'vertical', x_offset: int = 0, fixed_width: Optional[int] = None) -> None:
+    def draw_network_speeds(self, painter: QPainter, upload: float, download: float, width: int,
+                            height: int, config: RenderConfig, layout_mode: str = 'vertical',
+                            x_offset: int = 0, fixed_width: Optional[int] = None,
+                            speed_history: Optional[List[Any]] = None) -> None:
         """Draws current upload and download speeds."""
         try:
             # Format speeds
@@ -265,6 +268,7 @@ class WidgetRenderer:
                     height,
                     config,
                     x_offset,
+                    speed_history,
                 )
                 return
 
@@ -373,7 +377,8 @@ class WidgetRenderer:
 
     def _draw_network_pixel_hud_block(self, painter: QPainter, upload: float, download: float,
                                       up_val: str, down_val: str, width: int, height: int,
-                                      config: RenderConfig, x_offset: int) -> None:
+                                      config: RenderConfig, x_offset: int,
+                                      speed_history: Optional[List[Any]] = None) -> None:
         """Draws a compact pixel HUD network block."""
         painter.save()
         try:
@@ -406,13 +411,16 @@ class WidgetRenderer:
             top_bytes, bottom_bytes = (download, upload) if config.swap_upload_download else (upload, download)
             top_text, bottom_text = (down_val, up_val) if config.swap_upload_download else (up_val, down_val)
             top_color, bottom_color = (download_color, upload_color) if config.swap_upload_download else (upload_color, download_color)
-            self._draw_network_bidirectional_bars(
+            self._draw_network_bidirectional_history_bars(
                 painter,
                 graph_rect.adjusted(2, 2, -2, -2),
                 max(0.0, float(top_bytes)),
                 max(0.0, float(bottom_bytes)),
                 top_color,
                 bottom_color,
+                speed_history,
+                config.swap_upload_download,
+                not config.swap_upload_download,
             )
             self._draw_network_value_overlay(painter, graph_rect.adjusted(1, 1, -1, -1), top_text, bottom_text)
 
@@ -420,53 +428,102 @@ class WidgetRenderer:
         finally:
             painter.restore()
 
-    def _draw_network_bidirectional_bars(self, painter: QPainter, rect: QRect, top_value: float,
-                                         bottom_value: float, top_color: QColor, bottom_color: QColor) -> None:
-        """Draws upload/download as two stacked horizontal bars."""
+    def _draw_network_bidirectional_history_bars(self, painter: QPainter, rect: QRect, top_value: float,
+                                                 bottom_value: float, top_color: QColor, bottom_color: QColor,
+                                                 speed_history: Optional[List[Any]],
+                                                 swap_upload_download: bool,
+                                                 top_is_upload: bool) -> None:
+        """Draws 1-second upload/download history bars split by a center x-axis."""
         if rect.width() <= 2 or rect.height() <= 4:
             return
 
         baseline_y = rect.top() + rect.height() // 2
         top_area_h = max(1, baseline_y - rect.top() - 1)
         bottom_area_h = max(1, rect.bottom() - baseline_y - 1)
-        scale = max(top_value, bottom_value, 1.0)
         icon_slot_w = 8
-        bar_w = max(4, rect.width() - icon_slot_w - 2)
-        bar_x = rect.left() + icon_slot_w + 1
+        chart_x = rect.left() + icon_slot_w + 1
+        chart_w = max(4, rect.width() - icon_slot_w - 2)
+        bar_gap = 1
+        bar_w = 2
+        max_bars = max(1, (chart_w + bar_gap) // (bar_w + bar_gap))
+        samples = self._network_history_second_buckets(speed_history, top_value, bottom_value, swap_upload_download, max_bars)
+        scale = max([max(up, down) for up, down in samples] + [top_value, bottom_value, 1.0])
 
         top_bg = QColor(top_color)
-        top_bg.setAlpha(40)
-        painter.fillRect(QRect(bar_x, rect.top(), bar_w, top_area_h), top_bg)
+        top_bg.setAlpha(28)
+        painter.fillRect(QRect(chart_x, rect.top(), chart_w, top_area_h), top_bg)
         bottom_bg = QColor(bottom_color)
-        bottom_bg.setAlpha(40)
-        painter.fillRect(QRect(bar_x, baseline_y + 1, bar_w, bottom_area_h), bottom_bg)
+        bottom_bg.setAlpha(28)
+        painter.fillRect(QRect(chart_x, baseline_y + 1, chart_w, bottom_area_h), bottom_bg)
 
-        top_w = int(bar_w * min(1.0, top_value / scale))
-        bottom_w = int(bar_w * min(1.0, bottom_value / scale))
-        if top_w > 0:
-            fill = QColor(top_color)
-            fill.setAlpha(245)
-            painter.fillRect(QRect(bar_x, rect.top(), top_w, top_area_h), fill)
-        if bottom_w > 0:
-            fill = QColor(bottom_color)
-            fill.setAlpha(245)
-            painter.fillRect(QRect(bar_x, baseline_y + 1, bottom_w, bottom_area_h), fill)
+        start_x = chart_x + max(0, chart_w - ((len(samples) * bar_w) + (max(0, len(samples) - 1) * bar_gap)))
+        for idx, (top_sample, bottom_sample) in enumerate(samples):
+            x = start_x + idx * (bar_w + bar_gap)
+            if x > rect.right():
+                break
+
+            top_h = int(round(top_area_h * min(1.0, max(0.0, top_sample) / scale)))
+            if top_sample > 0 and top_h <= 0:
+                top_h = 1
+            if top_h > 0:
+                fill = QColor(top_color)
+                fill.setAlpha(235)
+                painter.fillRect(QRect(x, baseline_y - top_h, bar_w, top_h), fill)
+
+            bottom_h = int(round(bottom_area_h * min(1.0, max(0.0, bottom_sample) / scale)))
+            if bottom_sample > 0 and bottom_h <= 0:
+                bottom_h = 1
+            if bottom_h > 0:
+                fill = QColor(bottom_color)
+                fill.setAlpha(235)
+                painter.fillRect(QRect(x, baseline_y + 1, bar_w, bottom_h), fill)
 
         axis = QColor(255, 255, 255)
-        axis.setAlpha(95)
+        axis.setAlpha(115)
         painter.fillRect(QRect(rect.left(), baseline_y, rect.width(), 1), axis)
         self._draw_network_direction_icon(
             painter,
             QRect(rect.left(), rect.top(), icon_slot_w, top_area_h),
             top_color,
-            True,
+            top_is_upload,
         )
         self._draw_network_direction_icon(
             painter,
             QRect(rect.left(), baseline_y + 1, icon_slot_w, bottom_area_h),
             bottom_color,
-            False,
+            not top_is_upload,
         )
+
+    @staticmethod
+    def _network_history_second_buckets(speed_history: Optional[List[Any]], top_value: float,
+                                        bottom_value: float, swap_upload_download: bool,
+                                        max_bars: int) -> List[Tuple[float, float]]:
+        """Returns newest visible network samples grouped into one bar per second."""
+        fallback = [(max(0.0, top_value), max(0.0, bottom_value))]
+        if not speed_history:
+            return fallback
+
+        buckets: Dict[int, Tuple[float, float]] = {}
+        for item in speed_history:
+            try:
+                timestamp = getattr(item, "timestamp", None)
+                second = int(timestamp.timestamp()) if timestamp is not None else len(buckets)
+                upload = max(0.0, float(getattr(item, "upload", 0.0)))
+                download = max(0.0, float(getattr(item, "download", 0.0)))
+                top_sample, bottom_sample = (download, upload) if swap_upload_download else (upload, download)
+                old_top, old_bottom = buckets.get(second, (0.0, 0.0))
+                buckets[second] = (max(old_top, top_sample), max(old_bottom, bottom_sample))
+            except Exception:
+                continue
+
+        if not buckets:
+            return fallback
+
+        seconds = sorted(buckets.keys())
+        latest = seconds[-1]
+        earliest = max(seconds[0], latest - max_bars + 1)
+        samples = [buckets.get(second, (0.0, 0.0)) for second in range(earliest, latest + 1)]
+        return samples[-max_bars:] or fallback
 
     def _draw_network_value_overlay(self, painter: QPainter, rect: QRect, top_text: str, bottom_text: str) -> None:
         """Draws floating compact numeric overlays for the two network directions."""

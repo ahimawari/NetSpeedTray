@@ -628,7 +628,11 @@ class NetworkSpeedWidget(QWidget):
         elif mode == "network_only":
             up_bytes = (self.upload_speed * constants.network.units.MEGA_DIVISOR) / constants.network.units.BITS_PER_BYTE
             dw_bytes = (self.download_speed * constants.network.units.MEGA_DIVISOR) / constants.network.units.BITS_PER_BYTE
-            self.renderer.draw_network_speeds(painter, up_bytes, dw_bytes, self.width(), self.height(), config, layout)
+            history = self.widget_state.get_aggregated_speed_history()
+            self.renderer.draw_network_speeds(
+                painter, up_bytes, dw_bytes, self.width(), self.height(), config, layout,
+                speed_history=history,
+            )
         elif mode == "cpu_only":
             ram = (self.ram_used, self.ram_total) if config.monitor_ram_enabled else None
             self.renderer.draw_hardware_stats(painter, self.cpu_usage, None, self.width(), self.height(), config, self.cpu_temp, None, ram, None, layout, cpu_power=self.cpu_power, cpu_history=list(self.widget_state.cpu_history))
@@ -679,7 +683,11 @@ class NetworkSpeedWidget(QWidget):
                     
                 up_bytes = (self.upload_speed * constants.network.units.MEGA_DIVISOR) / constants.network.units.BITS_PER_BYTE
                 dw_bytes = (self.download_speed * constants.network.units.MEGA_DIVISOR) / constants.network.units.BITS_PER_BYTE
-                self.renderer.draw_network_speeds(painter, up_bytes, dw_bytes, self.width(), self.height(), config, layout, x_offset=current_x)
+                history = self.widget_state.get_aggregated_speed_history()
+                self.renderer.draw_network_speeds(
+                    painter, up_bytes, dw_bytes, self.width(), self.height(), config, layout,
+                    x_offset=current_x, speed_history=history,
+                )
             elif key == "cpu" and config.monitor_cpu_enabled:
                 ram = (self.ram_used, self.ram_total) if config.monitor_ram_enabled else None
                 self.renderer.draw_hardware_stats(painter, self.cpu_usage, None, self.width(), self.height(), config, self.cpu_temp, None, ram, None, layout, x_offset=current_x, cpu_power=self.cpu_power, cpu_history=list(self.widget_state.cpu_history))
