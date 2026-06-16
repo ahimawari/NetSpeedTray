@@ -211,16 +211,14 @@ class WidgetLayoutManager:
                     count = 0
                     if include_cpu:
                         count += 1
-                        if show_temps:
-                            count += 1
                         if monitor_ram:
                             count += 1
                     if include_gpu:
                         count += 1
-                        if show_temps:
-                            count += 1
                         if monitor_vram:
                             count += 1
+                    if show_temps and (include_cpu or include_gpu):
+                        count += 1
                     return count
 
                 if display_mode == "side_by_side":

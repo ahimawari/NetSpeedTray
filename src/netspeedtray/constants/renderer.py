@@ -30,8 +30,7 @@ class RendererConstants:
     PIXEL_HUD_GPU_COLOR: Final[str] = "#FF4FB3"
     PIXEL_HUD_RAM_COLOR: Final[str] = "#7CFF6B"
     PIXEL_HUD_VRAM_COLOR: Final[str] = "#FFD166"
-    PIXEL_HUD_CPU_TEMP_COLOR: Final[str] = "#FFB703"
-    PIXEL_HUD_GPU_TEMP_COLOR: Final[str] = "#FF7A59"
+    PIXEL_HUD_TEMP_COLOR: Final[str] = "#FFB703"
     
     # --- Sizing and Scaling ---
     GRAPH_HEIGHT_PERCENTAGE: Final[float] = 0.8

@@ -846,6 +846,8 @@ class WidgetRenderer:
         """Builds semantic compact blocks for utilization and memory-capacity metrics."""
         blocks: List[Dict[str, Any]] = []
         show_temps = bool(getattr(config, "show_hardware_temps", False))
+        temp_values: Dict[str, Optional[float]] = {"CPU": None, "GPU": None}
+        has_temp_metric = False
 
         for label, value, temp, mem_info, color_hex, _power in enabled_stats:
             metric = str(label).upper()
@@ -860,20 +862,8 @@ class WidgetRenderer:
             })
 
             if show_temps and metric in ("CPU", "GPU"):
-                temp_value = self._valid_temperature(temp)
-                blocks.append({
-                    "label": "CTP" if metric == "CPU" else "GTP",
-                    "value": temp_value if temp_value is not None else 0.0,
-                    "temp": None,
-                    "history": [],
-                    "color": QColor(
-                        constants.renderer.PIXEL_HUD_CPU_TEMP_COLOR
-                        if metric == "CPU"
-                        else constants.renderer.PIXEL_HUD_GPU_TEMP_COLOR
-                    ),
-                    "kind": "temp",
-                    "available": temp_value is not None,
-                })
+                temp_values[metric] = self._valid_temperature(temp)
+                has_temp_metric = True
 
             if metric == "CPU" and getattr(config, "monitor_ram_enabled", False):
                 mem_pct = self._memory_usage_percent(mem_info)
@@ -898,9 +888,20 @@ class WidgetRenderer:
                     "available": vram_pct is not None,
                 })
 
+        if show_temps and has_temp_metric:
+            blocks.append({
+                "label": "TMP",
+                "value": (temp_values["CPU"], temp_values["GPU"]),
+                "temp": None,
+                "history": [],
+                "color": QColor(constants.renderer.PIXEL_HUD_TEMP_COLOR),
+                "kind": "temps",
+                "available": any(value is not None for value in temp_values.values()),
+            })
+
         return blocks
 
-    def _draw_pixel_hud_block(self, painter: QPainter, label: str, value: float, temp: Optional[float], history: List[Any],
+    def _draw_pixel_hud_block(self, painter: QPainter, label: str, value: Any, temp: Optional[float], history: List[Any],
                               x: int, top: int, width: int, height: int, color: QColor,
                               kind: str, available: bool) -> None:
         """Draws one compact hardware block using the metric-specific mini visualization."""
@@ -919,21 +920,30 @@ class WidgetRenderer:
 
         self._draw_pixel_hud_frame(painter, graph_rect, accent, available)
 
-        pct = self._bounded_percent(value)
         inner = graph_rect.adjusted(2, 2, -2, -2)
-        if kind == "temp":
-            self._draw_block_temperature(painter, inner, value, accent, available)
-            self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), value, available, clamp=False)
+        if kind == "temps":
+            cpu_temp, gpu_temp = self._temperature_pair(value)
+            self._draw_block_temperatures(painter, inner, cpu_temp, gpu_temp, available)
+            self._draw_pixel_value_badge(
+                painter,
+                graph_rect.adjusted(1, 1, -1, -1),
+                self._temperature_pair_text(cpu_temp, gpu_temp),
+                available,
+            )
         elif kind == "capacity":
+            pct = self._bounded_percent(value)
             self._draw_block_capacity(painter, inner, pct, accent, available)
             self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), pct, available)
         elif kind == "grid":
+            pct = self._bounded_percent(value)
             self._draw_block_grid(painter, inner, pct, accent, available)
             self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), pct, available)
         elif kind == "bars":
+            pct = self._bounded_percent(value)
             self._draw_block_bars(painter, inner, history, pct, accent, available)
             self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), pct, available)
         else:
+            pct = self._bounded_percent(value)
             self._draw_block_sparkline(painter, inner, history, pct, accent, available)
             self._draw_block_value_text(painter, graph_rect.adjusted(1, 1, -1, -1), pct, available)
 
@@ -1073,13 +1083,14 @@ class WidgetRenderer:
             x = gauge.left() + int(gauge.width() * i / 4)
             painter.fillRect(QRect(x, gauge.top(), 1, gauge.height()), tick)
 
-    def _draw_block_temperature(self, painter: QPainter, rect: QRect, current_value: float,
-                                color: QColor, available: bool) -> None:
-        """Draws a compact vertical thermometer-style gauge for CPU/GPU temperature."""
+    def _draw_block_temperatures(self, painter: QPainter, rect: QRect,
+                                 cpu_temp: Optional[float], gpu_temp: Optional[float],
+                                 available: bool) -> None:
+        """Draws compact paired CPU/GPU temperature gauges in one block."""
         if rect.width() <= 1 or rect.height() <= 1:
             return
 
-        track = QColor(color)
+        track = QColor(constants.renderer.PIXEL_HUD_TEMP_COLOR)
         track.setAlpha(42 if available else 18)
         painter.fillRect(rect, track)
 
@@ -1089,19 +1100,33 @@ class WidgetRenderer:
             y = rect.top() + int(rect.height() * i / 4)
             painter.fillRect(QRect(rect.left(), y, rect.width(), 1), band)
 
-        if not available:
+        gap = 1
+        bar_w = max(1, (rect.width() - gap) // 2)
+        cpu_rect = QRect(rect.left(), rect.top(), bar_w, rect.height())
+        gpu_rect = QRect(rect.left() + bar_w + gap, rect.top(), rect.width() - bar_w - gap, rect.height())
+
+        divider = QColor(255, 255, 255)
+        divider.setAlpha(70 if available else 28)
+        painter.fillRect(QRect(cpu_rect.right() + 1, rect.top(), 1, rect.height()), divider)
+
+        self._draw_single_temperature_bar(painter, cpu_rect, cpu_temp, QColor(constants.renderer.PIXEL_HUD_CPU_COLOR))
+        self._draw_single_temperature_bar(painter, gpu_rect, gpu_temp, QColor(constants.renderer.PIXEL_HUD_GPU_COLOR))
+
+    def _draw_single_temperature_bar(self, painter: QPainter, rect: QRect,
+                                     temp: Optional[float], color: QColor) -> None:
+        if temp is None or rect.width() <= 0 or rect.height() <= 0:
             return
 
-        temp_c = max(0.0, min(100.0, float(current_value)))
+        temp_c = max(0.0, min(100.0, float(temp)))
         fill_h = max(1, int(rect.height() * temp_c / 100.0))
         fill = QColor(color)
-        fill.setAlpha(245)
+        fill.setAlpha(238)
         painter.fillRect(QRect(rect.left(), rect.bottom() - fill_h + 1, rect.width(), fill_h), fill)
 
-        hot_line = QColor(255, 255, 255)
-        hot_line.setAlpha(105)
+        marker = QColor(255, 255, 255)
+        marker.setAlpha(105)
         y = rect.bottom() - fill_h + 1
-        painter.fillRect(QRect(rect.left(), y, rect.width(), 1), hot_line)
+        painter.fillRect(QRect(rect.left(), y, rect.width(), 1), marker)
 
     def _draw_block_grid(self, painter: QPainter, rect: QRect, current_value: float,
                          color: QColor, available: bool) -> None:
@@ -1206,6 +1231,7 @@ class WidgetRenderer:
             ".": ("000", "000", "000", "000", "010"),
             ",": ("000", "000", "000", "010", "100"),
             "-": ("000", "000", "111", "000", "000"),
+            "/": ("001", "001", "010", "100", "100"),
         }
         rows = glyphs.get(ch, glyphs["-"])
         for row_idx, row in enumerate(rows):
@@ -1238,6 +1264,19 @@ class WidgetRenderer:
             return temp
         except Exception:
             return None
+
+    @staticmethod
+    def _temperature_pair(value: Any) -> Tuple[Optional[float], Optional[float]]:
+        if not isinstance(value, (tuple, list)) or len(value) < 2:
+            return None, None
+        return WidgetRenderer._valid_temperature(value[0]), WidgetRenderer._valid_temperature(value[1])
+
+    @staticmethod
+    def _temperature_pair_text(cpu_temp: Optional[float], gpu_temp: Optional[float]) -> str:
+        def part(value: Optional[float]) -> str:
+            return "--" if value is None else str(int(round(value)))
+
+        return f"{part(cpu_temp)}/{part(gpu_temp)}"
 
     @staticmethod
     def _pixel_hud_accent(color: QColor, available: bool) -> QColor:

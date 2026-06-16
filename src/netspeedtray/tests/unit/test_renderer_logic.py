@@ -80,7 +80,7 @@ def test_network_pixel_hud_history_buckets_respect_swap_order():
     assert samples == [(20.0, 10.0)]
 
 
-def test_pixel_hud_blocks_include_cpu_gpu_temperature_modules():
+def test_pixel_hud_blocks_merge_cpu_gpu_temperature_module():
     renderer = WidgetRenderer.__new__(WidgetRenderer)
     config = SimpleNamespace(
         show_hardware_temps=True,
@@ -95,12 +95,11 @@ def test_pixel_hud_blocks_include_cpu_gpu_temperature_modules():
     blocks = renderer._build_pixel_hud_blocks(enabled_stats, config, {})
     labels = [block["label"] for block in blocks]
 
-    assert labels == ["CPU", "CTP", "MEM", "GPU", "GTP", "VRM"]
-    assert blocks[1]["kind"] == "temp"
-    assert blocks[1]["available"] is True
-    assert blocks[1]["value"] == 71.2
-    assert blocks[4]["kind"] == "temp"
-    assert blocks[4]["available"] is False
+    assert labels == ["CPU", "MEM", "GPU", "VRM", "TMP"]
+    assert blocks[4]["kind"] == "temps"
+    assert blocks[4]["available"] is True
+    assert blocks[4]["value"] == (71.2, None)
+    assert WidgetRenderer._temperature_pair_text(71.2, None) == "71/--"
 
 
 def test_pixel_hud_blocks_hide_temperature_modules_when_disabled():
