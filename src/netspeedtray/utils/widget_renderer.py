@@ -562,16 +562,22 @@ class WidgetRenderer:
                 badge_h,
             )
 
-            bg = QColor(0, 0, 0)
-            bg.setAlpha(190)
-            painter.setPen(Qt.PenStyle.NoPen)
+            bg = QColor(4, 8, 12)
+            bg.setAlpha(108)
+            border = QColor(255, 255, 255)
+            border.setAlpha(58)
+            painter.setPen(QPen(border, 1))
             painter.setBrush(bg)
             painter.drawRoundedRect(badge, 1, 1)
 
             fg = QColor(255, 255, 255)
+            fg.setAlpha(236)
+            shadow = QColor(0, 0, 0)
+            shadow.setAlpha(178)
             x = badge.left() + int((badge.width() - total_w) / 2)
             y = badge.top() + int((badge.height() - digit_h) / 2)
             for ch in text:
+                self._draw_pixel_glyph(painter, ch, x, y + 1, scale, shadow)
                 self._draw_pixel_glyph(painter, ch, x, y, scale, fg)
                 x += digit_w + gap
         finally:
