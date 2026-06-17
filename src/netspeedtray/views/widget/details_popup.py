@@ -133,6 +133,37 @@ class ModuleDetailPopup(QWidget):
         self.show()
         self.raise_()
 
+    def show_outside_taskbar(self, anchor_rect: QRect, taskbar_rect: QRect, edge: str) -> None:
+        """Shows the popup outside the taskbar area, anchored near the widget."""
+        self.adjustSize()
+
+        screen = QGuiApplication.screenAt(anchor_rect.center()) or QGuiApplication.primaryScreen()
+        geom = screen.availableGeometry() if screen else QRect(anchor_rect.topLeft(), anchor_rect.size())
+        margin = 8
+        width = self.width()
+        height = self.height()
+
+        x = anchor_rect.center().x() - width // 2
+        x = max(geom.left() + margin, min(x, geom.right() - width - margin))
+
+        if edge == "top":
+            y = taskbar_rect.bottom() + margin
+        elif edge == "left":
+            x = taskbar_rect.right() + margin
+            y = anchor_rect.center().y() - height // 2
+        elif edge == "right":
+            x = taskbar_rect.left() - width - margin
+            y = anchor_rect.center().y() - height // 2
+        else:
+            y = taskbar_rect.top() - height - margin
+
+        y = max(geom.top() + margin, min(y, geom.bottom() - height - margin))
+        x = max(geom.left() + margin, min(x, geom.right() - width - margin))
+
+        self.move(x, y)
+        self.show()
+        self.raise_()
+
     def _apply_style(self) -> None:
         accent = self._accent
         self._panel.setStyleSheet(

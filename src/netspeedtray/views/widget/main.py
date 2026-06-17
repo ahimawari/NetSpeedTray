@@ -559,20 +559,52 @@ class NetworkSpeedWidget(QWidget):
         if self._pending_hover_key and self._pending_hover_anchor:
             self._show_detail_popup(self._pending_hover_key, self._pending_hover_anchor, sticky=False)
 
-    def show_module_detail_for_point(self, global_pos: Optional[QPoint] = None) -> None:
-        """Shows detail popup for the clicked module, falling back to overview."""
+    def show_all_hardware_details(self, global_pos: Optional[QPoint] = None) -> None:
+        """Shows all hardware details, anchored near the double-click location."""
         self.cancel_pending_detail_popup()
 
-        module_key = "overview"
         anchor = QRect(self.mapToGlobal(QPoint(0, 0)), self.size())
         if global_pos is not None:
             local_pos = self.mapFromGlobal(global_pos)
             hit = self._module_hit_at_point(local_pos)
             if hit:
-                module_key, rect = hit
+                _, rect = hit
                 anchor = QRect(self.mapToGlobal(rect.topLeft()), rect.size())
 
-        self._show_detail_popup(module_key, anchor, sticky=True)
+        self._show_all_hardware_detail_popup(anchor)
+
+    def _show_all_hardware_detail_popup(self, anchor: QRect) -> None:
+        if self.detail_popup is None:
+            self.detail_popup = ModuleDetailPopup(parent=None)
+
+        title, rows, accent = self._build_module_detail("hardware_overview")
+        if not rows:
+            return
+
+        self.detail_popup.set_content(title, rows, accent)
+
+        try:
+            taskbar_info = get_taskbar_info(preferred_screen_name=self.config.get("preferred_monitor"))
+            taskbar_rect = self._taskbar_rect_to_logical_qrect(taskbar_info)
+            edge = taskbar_info.get_edge_position().value
+            self.detail_popup.show_outside_taskbar(anchor, taskbar_rect, edge)
+        except Exception as e:
+            self.logger.error("Failed to position hardware detail outside taskbar: %s", e, exc_info=True)
+            self.detail_popup.show_for_rect(anchor)
+
+        self._detail_popup_key = "hardware_overview"
+        self._detail_popup_anchor = anchor
+        self._detail_popup_sticky = True
+
+    def _taskbar_rect_to_logical_qrect(self, taskbar_info) -> QRect:
+        scale = taskbar_info.dpi_scale if getattr(taskbar_info, "dpi_scale", 0) else 1.0
+        left, top, right, bottom = taskbar_info.rect
+        return QRect(
+            int(round(left / scale)),
+            int(round(top / scale)),
+            max(1, int(round((right - left) / scale))),
+            max(1, int(round((bottom - top) / scale))),
+        )
 
     def _show_detail_popup(self, module_key: str, anchor: QRect, sticky: bool, keep_position: bool = False) -> None:
         if self.detail_popup is None:
@@ -805,7 +837,7 @@ class NetworkSpeedWidget(QWidget):
         return self.i18n.DEFAULT_TEXT
 
     def _module_title(self, module_key: str) -> str:
-        if module_key == "overview":
+        if module_key in ("overview", "hardware_overview"):
             return self._detail_label("overview")
         if module_key == "network":
             return self._detail_label("network")
@@ -830,6 +862,7 @@ class NetworkSpeedWidget(QWidget):
             "vram": constants.renderer.PIXEL_HUD_VRAM_COLOR,
             "temp": constants.renderer.PIXEL_HUD_TEMP_COLOR,
             "overview": "#18E8FF",
+            "hardware_overview": "#18E8FF",
         }
         return accents.get(module_key, "#18E8FF")
 
@@ -886,11 +919,8 @@ class NetworkSpeedWidget(QWidget):
                 DetailRow(f"{self._detail_label('gpu')} {self._detail_label('power')}", self._format_optional_power(self.gpu_power)),
                 DetailRow(self._detail_label("source"), self._hardware_bridge_source()),
             ]
-        else:
+        elif module_key in ("overview", "hardware_overview"):
             rows = [
-                DetailRow(self._detail_label("network"), "", self._module_accent("network"), is_heading=True),
-                DetailRow(self.i18n.UPLOAD_LABEL, self._format_speed_detail(self.upload_speed), constants.graph.UPLOAD_LINE_COLOR),
-                DetailRow(self.i18n.DOWNLOAD_LABEL, self._format_speed_detail(self.download_speed), constants.graph.DOWNLOAD_LINE_COLOR),
                 DetailRow(self._detail_label("cpu"), "", self._module_accent("cpu"), is_heading=True),
                 DetailRow(self._detail_label("usage"), self._format_optional_percent(self.cpu_usage), constants.renderer.PIXEL_HUD_CPU_COLOR),
                 DetailRow(self._detail_label("temperature"), self._format_optional_temp(self.cpu_temp)),
@@ -902,6 +932,10 @@ class NetworkSpeedWidget(QWidget):
                 DetailRow(self._detail_label("power"), self._format_optional_power(self.gpu_power)),
                 DetailRow("VRAM", self._format_memory_detail(self.vram_used, self.vram_total), constants.renderer.PIXEL_HUD_VRAM_COLOR),
                 DetailRow(self._detail_label("source"), self._hardware_bridge_source()),
+            ]
+        else:
+            rows = [
+                DetailRow(self._detail_label("usage"), self.i18n.DEFAULT_TEXT, accent),
             ]
 
         return self._module_title(module_key), rows, accent
@@ -1259,7 +1293,7 @@ class NetworkSpeedWidget(QWidget):
             if self.input_handler and hasattr(self.input_handler, "show_hardware_details_once"):
                 self.input_handler.show_hardware_details_once(pos)
             else:
-                self.show_module_detail_for_point(pos)
+                self.show_all_hardware_details(pos)
             return
 
         self._poll_last_click_time_ms = now_ms
