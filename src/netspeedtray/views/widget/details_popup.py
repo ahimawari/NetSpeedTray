@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
-from PyQt6.QtCore import QPoint, QRect, Qt
+from PyQt6.QtCore import QEvent, QEventLoop, QPoint, QRect, Qt
 from PyQt6.QtGui import QColor, QGuiApplication
 from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
     QLabel,
+    QApplication,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -75,6 +76,8 @@ class ModuleDetailPopup(QWidget):
             item = self._grid.takeAt(0)
             widget = item.widget()
             if widget is not None:
+                widget.hide()
+                widget.setParent(None)
                 widget.deleteLater()
 
         row_index = 0
@@ -101,13 +104,13 @@ class ModuleDetailPopup(QWidget):
             row_index += 1
 
         self._apply_style()
-        self.adjustSize()
+        self._sync_layout_size()
 
     def show_at(self, anchor: QPoint) -> None:
         self.show_for_rect(QRect(anchor, anchor))
 
     def show_for_rect(self, anchor_rect: QRect) -> None:
-        self.adjustSize()
+        self._sync_layout_size()
 
         screen = QGuiApplication.screenAt(anchor_rect.center()) or QGuiApplication.primaryScreen()
         if screen is None:
@@ -135,7 +138,7 @@ class ModuleDetailPopup(QWidget):
 
     def show_outside_taskbar(self, anchor_rect: QRect, taskbar_rect: QRect, edge: str) -> None:
         """Shows the popup outside the taskbar area, anchored near the widget."""
-        self.adjustSize()
+        self._sync_layout_size()
 
         screen = QGuiApplication.screenAt(anchor_rect.center()) or QGuiApplication.primaryScreen()
         geom = screen.availableGeometry() if screen else QRect(anchor_rect.topLeft(), anchor_rect.size())
@@ -163,6 +166,28 @@ class ModuleDetailPopup(QWidget):
         self.move(x, y)
         self.show()
         self.raise_()
+
+    def _sync_layout_size(self) -> None:
+        """Forces layout sizing before positioning a reused popup."""
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.ensurePolished()
+        self._panel.ensurePolished()
+        for child in self.findChildren(QLabel):
+            child.ensurePolished()
+        self._grid.invalidate()
+        panel_layout = self._panel.layout()
+        if panel_layout is not None:
+            panel_layout.invalidate()
+            panel_layout.activate()
+        root_layout = self.layout()
+        if root_layout is not None:
+            root_layout.invalidate()
+            root_layout.activate()
+        QApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
+        hint = self.sizeHint()
+        if hint.isValid():
+            self.resize(hint)
+        self.adjustSize()
 
     def _apply_style(self) -> None:
         accent = self._accent
