@@ -787,6 +787,30 @@ class StatsMonitorThread(QThread):
                 self._wmi = None
         return None
 
+    def _update_lhm_notice_state(self, stats: Dict[str, Any]) -> None:
+        """Emit the hardware-source notice only after consecutive missing samples."""
+        if self._lhm_notice_emitted:
+            return
+
+        wants_temps = self.config.get('show_hardware_temps', False)
+        wants_power = self.config.get('show_hardware_power', False)
+        if not (wants_temps or wants_power):
+            self._lhm_check_polls = 0
+            return
+
+        has_any_reading = any(
+            stats.get(key) is not None
+            for key in ('cpu_temp', 'gpu_temp', 'cpu_power', 'gpu_power')
+        )
+        if has_any_reading:
+            self._lhm_check_polls = 0
+            return
+
+        self._lhm_check_polls += 1
+        if self._lhm_check_polls >= 5:
+            self._lhm_notice_emitted = True
+            self.lhm_not_detected.emit()
+
     def run(self) -> None:
         """Main monitoring loop."""
         self.logger.info("StatsMonitorThread starting loop.")
@@ -845,21 +869,8 @@ class StatsMonitorThread(QThread):
                 if stats:
                     self.stats_ready.emit(stats)
 
-                # One-time LHM notice: if temps/power enabled but no readings after a few polls
-                if not self._lhm_notice_emitted:
-                    wants_temps = self.config.get('show_hardware_temps', False)
-                    wants_power = self.config.get('show_hardware_power', False)
-                    if wants_temps or wants_power:
-                        self._lhm_check_polls += 1
-                        # Wait 5 polls (~5s) to give LHM time to be detected
-                        if self._lhm_check_polls >= 5:
-                            has_any_reading = any(
-                                stats.get(k) is not None
-                                for k in ('cpu_temp', 'gpu_temp', 'cpu_power', 'gpu_power')
-                            )
-                            if not has_any_reading:
-                                self._lhm_notice_emitted = True
-                                self.lhm_not_detected.emit()
+                # Ignore transient bridge read failures; warn only after 5 consecutive misses.
+                self._update_lhm_notice_state(stats)
 
                 # Success - reset circuit breaker
                 if self.consecutive_errors > 0:

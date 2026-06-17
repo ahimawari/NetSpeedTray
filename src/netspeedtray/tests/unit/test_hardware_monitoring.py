@@ -67,6 +67,25 @@ class TestHardwareMonitoring:
         mock_run.assert_called_once()
         assert "NetSpeedTray Hardware Bridge" in mock_run.call_args.args[0]
 
+    def test_lhm_notice_requires_consecutive_missing_readings(self, monitor_thread):
+        """A valid sample must reset the warning grace period after transient misses."""
+        monitor_thread.config = {"show_hardware_temps": True}
+        notices = []
+        monitor_thread.lhm_not_detected.connect(lambda: notices.append(True))
+
+        for _ in range(4):
+            monitor_thread._update_lhm_notice_state({})
+
+        monitor_thread._update_lhm_notice_state({"cpu_temp": 70.0})
+        assert monitor_thread._lhm_check_polls == 0
+
+        for _ in range(4):
+            monitor_thread._update_lhm_notice_state({})
+
+        assert notices == []
+        monitor_thread._update_lhm_notice_state({})
+        assert notices == [True]
+
     # ------------------------------------------------------------------
     # GPU hybrid polling
     # ------------------------------------------------------------------
