@@ -549,6 +549,8 @@ class NetworkSpeedWidget(QWidget):
         """Hides any visible detail popup."""
         if force:
             self._detail_popup_sticky = False
+            self._poll_last_click_time_ms = 0.0
+            self._poll_last_click_pos = None
         self.cancel_pending_detail_popup()
         if self.detail_popup:
             self.detail_popup.hide()
@@ -1253,6 +1255,7 @@ class NetworkSpeedWidget(QWidget):
             inside_widget = self._is_screen_point_inside_widget(cursor_x, cursor_y)
 
             if left_down and not self._poll_left_down:
+                self._hide_sticky_detail_for_outside_click(cursor_x, cursor_y)
                 self._poll_press_inside = inside_widget
                 self._poll_press_pos = cursor_pos
                 self._poll_press_dragging = False
@@ -1278,6 +1281,37 @@ class NetworkSpeedWidget(QWidget):
         except Exception:
             rect = self.frameGeometry()
             return rect.contains(QPoint(x, y))
+
+    def _hide_sticky_detail_for_outside_click(self, x: int, y: int) -> bool:
+        """Hide the double-click hardware detail popup when clicking outside it."""
+        if not self._should_hide_sticky_detail_on_click(x, y):
+            return False
+
+        self.hide_detail_popup(force=True)
+        return True
+
+    def _should_hide_sticky_detail_on_click(self, x: int, y: int) -> bool:
+        if (
+            not self._detail_popup_sticky
+            or self.detail_popup is None
+            or not self.detail_popup.isVisible()
+        ):
+            return False
+
+        return (
+            not self._is_screen_point_inside_widget(x, y)
+            and not self._is_screen_point_inside_detail_popup(x, y)
+        )
+
+    def _is_screen_point_inside_detail_popup(self, x: int, y: int) -> bool:
+        if self.detail_popup is None:
+            return False
+
+        try:
+            left, top, right, bottom = win32gui.GetWindowRect(int(self.detail_popup.winId()))
+            return left <= x < right and top <= y < bottom
+        except Exception:
+            return self.detail_popup.frameGeometry().contains(QPoint(x, y))
 
     def _handle_polled_click_release(self, pos: QPoint) -> None:
         now_ms = time.monotonic() * 1000.0
